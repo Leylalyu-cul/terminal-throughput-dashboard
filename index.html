@@ -116,18 +116,22 @@
       id: 'port-month', title: 'Port x Month',
       rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
       filter: { 'ATD_Year': '2026' },
+      sortDesc: true,
       legend: 'Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
     },
     {
       id: 'lane-month', title: 'Lane x Month',
       rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
       filter: { 'ATD_Year': '2026' },
+      sortDesc: true,
       legend: 'Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
     },
     {
       id: 'port-lane-type', title: 'Port x Lane x Type',
       rows: ['Port', 'Lane'], cols: ['TYPE', 'Load Status'], vals: ['Actual TEU'],
       filter: { 'ATD_Year': '2026' },
+      sortDesc: true,
+      subtotalRows: true,
       legend: 'Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU'
     },
     {
@@ -251,13 +255,22 @@
     });
   }
 
+  // Sort by first data field descending
+  function descSort(valName) {
+    return function(a, b) {
+      const av = parseFloat((a[valName] || 0).toString().replace(/,/g, ''));
+      const bv = parseFloat((b[valName] || 0).toString().replace(/,/g, ''));
+      return bv - av;
+    };
+  }
+
   function renderPivot(cfg) {
     const src = cfg.computed ? computedMap[cfg.id] : rawData;
     const filtered = applyFilter(src, cfg.filter);
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
 
-    $(target).pivotUI(filtered, {
+    const opts = {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
@@ -265,7 +278,24 @@
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
       }
-    }, true);
+    };
+
+    if (cfg.sortDesc) {
+      const valKey = cfg.vals[0];
+      opts.sorters = {
+        rowLabelLatch: function(a, b) {
+          const av = filtered.filter(r => String(r[cfg.rows[0]]) === a).reduce((s, r) => s + (r[valKey] || 0), 0);
+          const bv = filtered.filter(r => String(r[cfg.rows[0]]) === b).reduce((s, r) => s + (r[valKey] || 0), 0);
+          return bv - av;
+        }
+      };
+    }
+
+    if (cfg.subtotalRows) {
+      opts.rowSubTotalDisplay = { displayOnTop: true };
+    }
+
+    $(target).pivotUI(filtered, opts, true);
 
     if (cfg.chart) drawWeeklyChart(filtered);
   }
