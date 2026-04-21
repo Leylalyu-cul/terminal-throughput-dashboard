@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CULINES Terminal Throughput Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body { background: #f4f6f9; font-family: 'Segoe UI', Arial, sans-serif; }
+    .navbar { background: #1a3c6e; }
+    .navbar-brand { color: #fff; font-weight: 700; font-size: 1.2rem; }
+    .navbar-brand span { color: #4fc3f7; }
+    .card { border: none; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.08); margin-bottom: 16px; }
+    .card-header { background: #fff; border-bottom: 2px solid #e8ecf0; font-weight: 600; font-size: 0.95rem; padding: 12px 16px; }
+    .nav-tabs .nav-link { color: #555; font-weight: 500; border-radius: 8px 8px 0 0; margin-right: 4px; }
+    .nav-tabs .nav-link.active { background: #1a3c6e; color: #fff; }
+    .pivotTable .p-ui-widget { font-size: 13px; }
+    .pvtVal { background: #eaf2ff; font-weight: 600; }
+    .pvtGrandTotal { background: #1a3c6e !important; color: #fff !important; font-weight: 700; }
+    .preset-btns { margin-bottom: 12px; }
+    .preset-btns .btn { font-size: 0.8rem; padding: 3px 10px; }
+    .preset-btns .btn.active { background: #1a3c6e; color: #fff; border-color: #1a3c6e; }
+    .info-bar { font-size: 0.8rem; color: #888; margin-bottom: 6px; }
+    #spinner { display: none; text-align: center; padding: 40px; color: #888; }
+    .tab-content { padding-top: 12px; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg mb-3">
+  <div class="container-fluid">
+    <span class="navbar-brand">CULINES <span>Terminal Throughput</span> Dashboard</span>
+    <span class="text-white-50" style="font-size:.85rem">2025–2026 YTD &nbsp;|&nbsp; <span id="rowCount">–</span> records</span>
+  </div>
+</nav>
+
+<div class="container-fluid px-3">
+  <!-- Preset filters bar -->
+  <div class="card">
+    <div class="card-header d-flex align-items-center gap-3">
+      <span>Quick Presets:</span>
+      <div class="preset-btns" id="presetBar"></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs" id="pivotTabs" role="tablist"></ul>
+
+  <div class="tab-content" id="pivotTabContent">
+    <div id="spinner"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading pivot table...</div></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/export_renderers.js"></script>
+<script>
+(async () => {
+  const spinner = document.getElementById('spinner');
+
+  // ── Load data ──────────────────────────────────────────────────────────────
+  spinner.style.display = 'block';
+  const resp = await fetch('data/pivot_data.json');
+  const data = await resp.json();
+  document.getElementById('rowCount').textContent = data.length.toLocaleString();
+  spinner.style.display = 'none';
+
+  // ── Tabs configuration ────────────────────────────────────────────────────
+  const tabs = [
+    {
+      id: 'port-month', title: 'Port x Month',
+      derivedAttrs: { 'Actual TEU': r => r['Actual TEU'] },
+      cols: ['Port'], rows: [], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }
+    },
+    {
+      id: 'lane-month', title: 'Lane x Month',
+      cols: ['Lane'], rows: [], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }
+    },
+    {
+      id: 'port-lane-type', title: 'Port x Lane x Type',
+      cols: ['Port', 'Lane'], rows: [], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }
+    },
+    {
+      id: 'outbound', title: 'Outbound Report',
+      cols: ['ATD_Year', 'ATD Month'], rows: ['Port'], vals: ['Actual TEU'],
+      filter: { 'TYPE': ['OUT', 'T/S OUT'] }
+    },
+    {
+      id: 'inbound', title: 'Inbound Report',
+      cols: ['ATD_Year', 'ATD Month'], rows: ['Port'], vals: ['Actual TEU'],
+      filter: { 'TYPE': ['IN', 'T/S IN'] }
+    },
+    {
+      id: 'booking', title: 'Booking vs Actual',
+      cols: [], rows: ['Port'], vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate (Avg)'],
+      filter: { 'ATD_Year': '2026' }
+    },
+  ];
+
+  // ── Render tabs ────────────────────────────────────────────────────────────
+  const tabList = document.getElementById('pivotTabs');
+  const tabContent = document.getElementById('pivotTabContent');
+
+  tabs.forEach((cfg, idx) => {
+    const tabId = 'tab-' + cfg.id;
+    tabList.innerHTML += `<li class="nav-item" role="presentation">
+      <button class="nav-link ${idx === 0 ? 'active' : ''}" id="${tabId}-btn" data-bs-toggle="tab"
+        data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button></li>`;
+    tabContent.innerHTML += `<div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="${tabId}" role="tabpanel">
+      <div class="card"><div class="card-body p-2"><div id="pivot-${cfg.id}"></div></div></div></div>`;
+  });
+
+  // Trigger Bootstrap tab init
+  if (window.bootstrap) {
+    const triggerList = document.querySelectorAll('[data-bs-toggle="tab"]');
+    triggerList.forEach(t => new bootstrap.Tab(t));
+  }
+
+  // ── PivotTable.js render ──────────────────────────────────────────────────
+  const pivotters = {};
+
+  function renderPivot(cfg) {
+    const target = document.getElementById('pivot-' + cfg.id);
+    target.innerHTML = '';
+
+    const filtered = data.filter(row => {
+      for (const [k, v] of Object.entries(cfg.filter || {})) {
+        const rv = String(row[k] ?? '');
+        if (Array.isArray(v)) { if (!v.includes(rv)) return false; }
+        else { if (rv !== v) return false; }
+      }
+      return true;
+    });
+
+    $(target).pivotUI(filtered, {
+      rows: cfg.rows,
+      cols: cfg.cols,
+      vals: cfg.vals,
+      aggregatorName: cfg.vals.includes('Fulfill Rate (Avg)') ? 'Integer Sum' : 'Integer Sum',
+      rendererName: 'Table',
+      onRefresh: function (pivotUI) {
+        // Style grand total cells
+        pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
+      },
+      rendererOptions: { sort: { function(a,b){ return b - a; } } }
+    }, true);
+
+    pivotters[cfg.id] = target;
+  }
+
+  // Render first tab immediately
+  renderPivot(tabs[0]);
+
+  // Lazy render on tab switch
+  let rendered = new Set([0]);
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach((btn, i) => {
+    btn.addEventListener('shown.bs.tab', () => {
+      if (!rendered.has(i)) {
+        renderPivot(tabs[i]);
+        rendered.add(i);
+      }
+    });
+  });
+
+  // ── Preset filter bar (controls active tab) ───────────────────────────────
+  const presets = [
+    { label: '2026 Full Year', filter: { 'ATD_Year': '2026' } },
+    { label: '2025 Full Year', filter: { 'ATD_Year': '2025' } },
+    { label: '2026 Q1 (Jan–Mar)', filter: { 'ATD Month__gte': '2026-01', 'ATD Month__lte': '2026-03' } },
+    { label: '2026 Q2 (Apr–Jun)', filter: { 'ATD Month__gte': '2026-04', 'ATD Month__lte': '2026-06' } },
+    { label: 'OUT / T/S OUT', filter: { 'TYPE__in': ['OUT', 'T/S OUT'] } },
+    { label: 'IN / T/S IN', filter: { 'TYPE__in': ['IN', 'T/S IN'] } },
+    { label: 'All Data', filter: {} },
+  ];
+
+  const presetBar = document.getElementById('presetBar');
+  presets.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-outline-secondary btn-sm' + (i === 0 ? ' active' : '');
+    btn.textContent = p.label;
+    btn.onclick = () => {
+      presetBar.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Re-render all rendered pivots with new filter
+      rendered.forEach(idx => {
+        const cfg = { ...tabs[idx], filter: p.filter };
+        renderPivot(cfg);
+      });
+    };
+    presetBar.appendChild(btn);
+  });
+
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
