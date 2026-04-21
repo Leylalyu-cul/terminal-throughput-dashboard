@@ -29,6 +29,8 @@
     .tab-legend strong { color: #555; }
     .pvtRenderer { min-width: 200px; }
     .pvtTable { font-size: 12px; }
+    .chart-wrap { position: relative; height: 260px; margin-bottom: 12px; }
+    .chart-wrap canvas { max-height: 260px; }
   </style>
 </head>
 <body>
@@ -48,6 +50,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.js"></script>
@@ -210,11 +213,13 @@ const tabs = [
     tabList.innerHTML += `<li class="nav-item" role="presentation">
       <button class="nav-link ${idx === 0 ? 'active' : ''}" id="${tabId}-btn"
         data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button></li>`;
+    const chartCanvas = cfg.id === 'weekly-trend'
+      ? `<div class="chart-wrap"><canvas id="chart-${cfg.id}"></canvas></div>` : '';
     tabContent.innerHTML += `
       <div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="${tabId}" role="tabpanel">
         <div class="card mt-2">
           <div class="card-header"><span>Field Layout: </span><span class="tab-legend">${cfg.legend}</span></div>
-          <div class="card-body p-2"><div id="pivot-${cfg.id}"></div></div>
+          <div class="card-body p-2">${chartCanvas}<div id="pivot-${cfg.id}"></div></div>
         </div>
       </div>`;
   });
@@ -242,6 +247,56 @@ const tabs = [
 
 
 
+  // Line chart for Weekly Trend tab
+  let weeklyChart = null;
+  function drawWeeklyChart(filtered) {
+    const canvas = document.getElementById('chart-weekly-trend');
+    if (!canvas) return;
+    // Aggregate by Week, sorted chronologically
+    const byWeek = {};
+    filtered.forEach(r => {
+      const w = r.Week || '';
+      byWeek[w] = (byWeek[w] || 0) + (r['Actual TEU'] || 0);
+    });
+    const sorted = Object.keys(byWeek).sort();
+    const values = sorted.map(w => byWeek[w]);
+
+    if (weeklyChart) weeklyChart.destroy();
+    weeklyChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: sorted,
+        datasets: [{
+          label: 'Actual TEU',
+          data: values,
+          borderColor: '#1a3c6e',
+          backgroundColor: 'rgba(26,60,110,0.08)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#4fc3f7',
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, position: 'top', labels: { font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} TEU`
+            }
+          }
+        },
+        scales: {
+          x: { ticks: { maxRotation: 45, font: { size: 11 } } },
+          y: { ticks: { font: { size: 11 } }, beginAtZero: true }
+        }
+      }
+    });
+  }
+
   function renderPivot(cfg, sourceData) {
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
@@ -267,6 +322,10 @@ const tabs = [
     };
 
     $(target).pivotUI(filtered, opts, true);
+
+    if (cfg.id === 'weekly-trend') {
+      drawWeeklyChart(filtered);
+    }
   }
 
   // Render first tab immediately
