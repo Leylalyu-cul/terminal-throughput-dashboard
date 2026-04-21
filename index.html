@@ -143,9 +143,9 @@
     },
     {
       id: 'booking', title: 'Booking vs Actual',
-      rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate'],
+      rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
       filter: { 'ATD_Year': '2026' },
-      legend: 'Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Gap + Fulfill Rate'
+      legend: 'Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate'
     },
     {
       id: 'outbound', title: 'Outbound Report',
@@ -266,15 +266,15 @@
     return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
   }
 
-  // Sort rows by first val desc
-  function getRowOrder(src, rowField, valField) {
-    const sums = {};
-    src.forEach(r => {
-      const k = String(r[rowField] || '');
-      if (!k) return;
-      sums[k] = (sums[k] || 0) + (Number(r[valField]) || 0);
-    });
-    return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  // Month sort: "2026-01" → numeric
+  function monthKey(s) {
+    const parts = String(s).split('-');
+    return parts.length === 2 ? parseInt(parts[0]) * 100 + parseInt(parts[1]) : 0;
+  }
+
+  // Week sort: "W10" → 10
+  function weekNum(s) {
+    return parseInt(String(s).replace(/[^0-9]/g, '')) || 0;
   }
 
   function renderPivot(cfg) {
@@ -284,14 +284,33 @@
     target.innerHTML = '';
 
     const valKey = cfg.vals[0];
-    const rowOrder = cfg.sortDesc ? getRowOrder(filtered, cfg.rows[0], valKey) : null;
+
+    // Build sorters map
+    const sorters = {};
+    if (cfg.rows.includes('Week')) {
+      sorters['Week'] = function(a, b) { return weekNum(a) - weekNum(b); };
+    }
+    if (cfg.cols.includes('ATD Month')) {
+      sorters['ATD Month'] = function(a, b) { return monthKey(a) - monthKey(b); };
+    }
+    if (cfg.sortDesc && cfg.rows.length > 0) {
+      const sums = {};
+      filtered.forEach(r => {
+        const k = String(r[cfg.rows[0]] || '');
+        if (!k) return;
+        sums[k] = (sums[k] || 0) + (Number(r[valKey]) || 0);
+      });
+      const order = Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+      sorters[cfg.rows[0]] = function(a, b) { return order.indexOf(a) - order.indexOf(b); };
+    }
 
     const opts = {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
       aggregatorName: 'Integer Sum',
-      rowOrder: rowOrder,
+      rendererName: 'Table',
+      sorters: Object.keys(sorters).length > 0 ? sorters : undefined,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
       }
@@ -300,7 +319,7 @@
     try {
       $(target).pivotUI(filtered, opts, true);
     } catch(e) {
-      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '</div><pre>' + e.stack + '</pre>';
+      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '<br><pre>' + e.stack + '</pre></div>';
     }
 
     if (cfg.chart) drawWeeklyChart(filtered);
