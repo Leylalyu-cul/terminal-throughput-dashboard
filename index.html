@@ -174,7 +174,7 @@
         data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button></li>`;
 
     const chartDiv = cfg.chart
-      ? `<div class="chart-container"><canvas id="chart-${cfg.id}"></canvas></div>` : '';
+      ? `<div class="chart-container"><canvas id="chart-weekly"></canvas></div>` : '';
 
     tabContent.innerHTML += `
       <div class="tab-pane fade${idx === 0 ? ' show active' : ''}" id="${tabId}" role="tabpanel">
@@ -192,7 +192,7 @@
   let weeklyChart = null;
 
   function drawWeeklyChart(filtered) {
-    const canvas = document.getElementById('chart-weekly-trend');
+    const canvas = document.getElementById('chart-weekly');
     if (!canvas) return;
 
     const byWeek = {};
@@ -266,75 +266,44 @@
     return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
   }
 
-  // Inject "∑ Total" rows after each parent group
-  function injectSubtotalRows(data, parentField, childField, valFields) {
-    const result = [];
-    const parents = [...new Set(data.map(r => String(r[parentField] || '')))].filter(Boolean);
-    parents.forEach(p => {
-      const children = data.filter(r => String(r[parentField] || '') === p);
-      children.forEach(r => result.push(r));
-      const sub = { [parentField]: p, [childField]: '∑ Total' };
-      valFields.forEach(v => {
-        sub[v] = children.reduce((s, r) => s + (r[v] || 0), 0);
-      });
-      result.push(sub);
+  // Sort rows by first val desc
+  function getRowOrder(src, rowField, valField) {
+    const sums = {};
+    src.forEach(r => {
+      const k = String(r[rowField] || '');
+      if (!k) return;
+      sums[k] = (sums[k] || 0) + (Number(r[valField]) || 0);
     });
-    return result;
-  }
-
-  // Sanitize: replace undefined/null with empty string
-  function sanitize(arr) {
-    return arr.map(row => {
-      const clean = {};
-      for (const k in row) {
-        clean[k] = (row[k] === undefined || row[k] === null) ? '' : row[k];
-      }
-      return clean;
-    });
+    return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
   }
 
   function renderPivot(cfg) {
     const src = cfg.computed ? computedMap[cfg.id] : rawData;
-    let filtered = applyFilter(src, cfg.filter);
+    const filtered = applyFilter(src, cfg.filter);
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
 
-    // Inject subtotal rows if needed (Port x Lane x Type)
-    if (cfg.subtotalRows && cfg.rows.length >= 2) {
-      filtered = sanitize(injectSubtotalRows(filtered, cfg.rows[0], cfg.rows[1], cfg.vals));
-    } else {
-      filtered = sanitize(filtered);
-    }
-
-    // Row order for sortDesc tabs
     const valKey = cfg.vals[0];
-    const rowOrder = cfg.sortDesc
-      ? getRowOrder(applyFilter(src, cfg.filter), cfg.rows[0], valKey)
-      : null;
-
-    // Use correct aggregator: Fulfill Rate needs "Average", rest use "Integer Sum"
-    const hasFulfillRate = cfg.vals.includes('Fulfill Rate');
-    const aggName = hasFulfillRate ? 'Integer Sum' : 'Integer Sum';
+    const rowOrder = cfg.sortDesc ? getRowOrder(filtered, cfg.rows[0], valKey) : null;
 
     const opts = {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
-      aggregatorName: aggName,
+      aggregatorName: 'Integer Sum',
       rowOrder: rowOrder,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
-        pivotUI.find('td:contains("\u2211 Total")').css('font-weight', '700').parent().css('background', '#dce8fe');
       }
     };
 
     try {
       $(target).pivotUI(filtered, opts, true);
     } catch(e) {
-      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '</div>';
+      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '</div><pre>' + e.stack + '</pre>';
     }
 
-    if (cfg.chart) drawWeeklyChart(applyFilter(src, cfg.filter));
+    if (cfg.chart) drawWeeklyChart(filtered);
   }
 
   // ── Init: render all tabs immediately ─────────────────────────────────────
