@@ -255,49 +255,68 @@
     });
   }
 
-  // Sort by first data field descending
-  function descSort(valName) {
-    return function(a, b) {
-      const av = parseFloat((a[valName] || 0).toString().replace(/,/g, ''));
-      const bv = parseFloat((b[valName] || 0).toString().replace(/,/g, ''));
-      return bv - av;
-    };
+  // Compute row order: sort by first row field by sum of first val descending
+  function getRowOrder(filtered, rowField, valField) {
+    const sums = {};
+    filtered.forEach(r => {
+      const k = String(r[rowField] || '');
+      if (!k) return;
+      sums[k] = (sums[k] || 0) + (r[valField] || 0);
+    });
+    return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  }
+
+  // Inject "∑ Total" rows after each parent group
+  function injectSubtotalRows(data, parentField, childField, valFields) {
+    const result = [];
+    const parents = [...new Set(data.map(r => String(r[parentField] || '')))].filter(Boolean);
+    parents.forEach(p => {
+      const children = data.filter(r => String(r[parentField] || '') === p);
+      children.forEach(r => result.push(r));
+      const sub = { [parentField]: p, [childField]: '∑ Total' };
+      valFields.forEach(v => {
+        sub[v] = children.reduce((s, r) => s + (r[v] || 0), 0);
+      });
+      // Carry over all other fields from first child
+      Object.keys(children[0] || {}).forEach(k => {
+        if (!(k in sub)) sub[k] = children[0][k];
+      });
+      result.push(sub);
+    });
+    return result;
   }
 
   function renderPivot(cfg) {
     const src = cfg.computed ? computedMap[cfg.id] : rawData;
-    const filtered = applyFilter(src, cfg.filter);
+    let filtered = applyFilter(src, cfg.filter);
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
+
+    if (cfg.subtotalRows && cfg.rows.length >= 2) {
+      filtered = injectSubtotalRows(filtered, cfg.rows[0], cfg.rows[1], cfg.vals);
+    }
+
+    const valKey = cfg.vals[0];
+    const rowOrder = cfg.sortDesc ? getRowOrder(applyFilter(src, cfg.filter), cfg.rows[0], valKey) : null;
 
     const opts = {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
       aggregatorName: 'Integer Sum',
+      rendererName: 'Table',
+      rowOrder: rowOrder,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
+        // Style subtotal rows
+        pivotUI.find('td:contains("∑ Total")').siblings().css('font-weight', '600').parent().css('background', '#e8f0fe');
+        pivotUI.find('td:contains("∑ Total")').css('font-weight', '700').parent().css('background', '#dce8fe');
       }
     };
 
-    if (cfg.sortDesc) {
-      const valKey = cfg.vals[0];
-      opts.sorters = {
-        rowLabelLatch: function(a, b) {
-          const av = filtered.filter(r => String(r[cfg.rows[0]]) === a).reduce((s, r) => s + (r[valKey] || 0), 0);
-          const bv = filtered.filter(r => String(r[cfg.rows[0]]) === b).reduce((s, r) => s + (r[valKey] || 0), 0);
-          return bv - av;
-        }
-      };
-    }
-
-    if (cfg.subtotalRows) {
-      opts.rowSubTotalDisplay = { displayOnTop: true };
-    }
-
     $(target).pivotUI(filtered, opts, true);
 
-    if (cfg.chart) drawWeeklyChart(filtered);
+    if (cfg.chart) drawWeeklyChart(applyFilter(src, cfg.filter));
   }
 
   // ── Init: render all tabs immediately ─────────────────────────────────────
