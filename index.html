@@ -77,7 +77,6 @@
   const tabs = [
     {
       id: 'port-month', title: 'Port x Month',
-      derivedAttrs: { 'Actual TEU': r => r['Actual TEU'] },
       cols: ['Port'], rows: [], vals: ['Actual TEU'],
       filter: { 'ATD_Year': '2026' }
     },
@@ -92,6 +91,16 @@
       filter: { 'ATD_Year': '2026' }
     },
     {
+      id: 'weekly-trend', title: 'Weekly Trend',
+      cols: [], rows: ['Week'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }
+    },
+    {
+      id: 'booking', title: 'Booking vs Actual',
+      cols: [], rows: ['Port'], vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate (Avg)'],
+      filter: { 'ATD_Year': '2026' }
+    },
+    {
       id: 'outbound', title: 'Outbound Report',
       cols: ['ATD_Year', 'ATD Month'], rows: ['Port'], vals: ['Actual TEU'],
       filter: { 'TYPE': ['OUT', 'T/S OUT'] }
@@ -100,11 +109,6 @@
       id: 'inbound', title: 'Inbound Report',
       cols: ['ATD_Year', 'ATD Month'], rows: ['Port'], vals: ['Actual TEU'],
       filter: { 'TYPE': ['IN', 'T/S IN'] }
-    },
-    {
-      id: 'booking', title: 'Booking vs Actual',
-      cols: [], rows: ['Port'], vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate (Avg)'],
-      filter: { 'ATD_Year': '2026' }
     },
   ];
 
