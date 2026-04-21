@@ -224,31 +224,20 @@ const tabs = [
     document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => new bootstrap.Tab(t));
   }
 
-  const pivotters = {};
+  // Pre-compute Fulfill Rate per row so pivot can aggregate by average
+  data.forEach(r => {
+    r['Fulfill Rate'] = (r['Booking TEU'] > 0) ? r['Actual TEU'] / r['Booking TEU'] : 0;
+  });
 
-  // PivotTable.js aggregator for Fulfill Rate (Avg)
-  const pctFmt = { fmtint: '#,##0', fmtfloat: '0.0%' };
-  $.pivotutilities.format2 = function (x) {
-    if (x === (x | 0)) return $.pivotutilities.formatNumber(x, pctFmt.fmtint);
-    return $.pivotutilities.formatNumber(x, pctFmt.fmtfloat);
-  };
+  const dataMap = { 'outbound': dataOB, 'inbound': dataIB };
 
-  // Custom aggregator for Fulfill Rate
-  function avgFulfill(r) {
-    return {
-      'Booking TEU': r['Booking TEU'],
-      'Actual TEU': r['Actual TEU'],
-      'Gap': r['Gap'],
-      'Fulfill Rate (Avg)': (r['Booking TEU'] > 0 ? r['Actual TEU'] / r['Booking TEU'] : 0)
-    };
-  }
 
-  function getAggregator(vals) {
-    if (vals.includes('Fulfill Rate (Avg)')) {
-      return { aggregatorName: 'Custom', customAggregator: { name: 'Fulfill', fn: avgFulfill } };
-    }
-    return { aggregatorName: 'Integer Sum' };
-  }
+
+
+
+
+
+
 
 
 
@@ -257,7 +246,7 @@ const tabs = [
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
 
-    // Apply filter
+    // Apply preset filter
     const filtered = sourceData.filter(row => {
       for (const [k, v] of Object.entries(cfg.filter || {})) {
         const rv = String(row[k] ?? '');
@@ -271,22 +260,14 @@ const tabs = [
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
-      ...getAggregator(cfg.vals),
-      rendererOptions: { sort: { function(a,b){ return b - a; } } },
+      aggregatorName: 'Integer Sum',
       onRefresh: function (pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
       }
     };
 
     $(target).pivotUI(filtered, opts, true);
-    pivotters[cfg.id] = target;
   }
-
-  // Map: tab id → source data
-  const dataMap = {
-    'outbound': dataOB,
-    'inbound':  dataIB,
-  };
 
   // Render first tab immediately
   renderPivot(tabs[0], tabs[0].computed ? dataMap[tabs[0].id] : data);
