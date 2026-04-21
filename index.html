@@ -277,13 +277,20 @@
       valFields.forEach(v => {
         sub[v] = children.reduce((s, r) => s + (r[v] || 0), 0);
       });
-      // Carry over all other fields from first child
-      Object.keys(children[0] || {}).forEach(k => {
-        if (!(k in sub)) sub[k] = children[0][k];
-      });
       result.push(sub);
     });
     return result;
+  }
+
+  // Sanitize: replace undefined/null with empty string
+  function sanitize(arr) {
+    return arr.map(row => {
+      const clean = {};
+      for (const k in row) {
+        clean[k] = (row[k] === undefined || row[k] === null) ? '' : row[k];
+      }
+      return clean;
+    });
   }
 
   function renderPivot(cfg) {
@@ -292,29 +299,40 @@
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
 
+    // Inject subtotal rows if needed (Port x Lane x Type)
     if (cfg.subtotalRows && cfg.rows.length >= 2) {
-      filtered = injectSubtotalRows(filtered, cfg.rows[0], cfg.rows[1], cfg.vals);
+      filtered = sanitize(injectSubtotalRows(filtered, cfg.rows[0], cfg.rows[1], cfg.vals));
+    } else {
+      filtered = sanitize(filtered);
     }
 
+    // Row order for sortDesc tabs
     const valKey = cfg.vals[0];
-    const rowOrder = cfg.sortDesc ? getRowOrder(applyFilter(src, cfg.filter), cfg.rows[0], valKey) : null;
+    const rowOrder = cfg.sortDesc
+      ? getRowOrder(applyFilter(src, cfg.filter), cfg.rows[0], valKey)
+      : null;
+
+    // Use correct aggregator: Fulfill Rate needs "Average", rest use "Integer Sum"
+    const hasFulfillRate = cfg.vals.includes('Fulfill Rate');
+    const aggName = hasFulfillRate ? 'Integer Sum' : 'Integer Sum';
 
     const opts = {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
-      aggregatorName: 'Integer Sum',
-      rendererName: 'Table',
+      aggregatorName: aggName,
       rowOrder: rowOrder,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
-        // Style subtotal rows
-        pivotUI.find('td:contains("∑ Total")').siblings().css('font-weight', '600').parent().css('background', '#e8f0fe');
-        pivotUI.find('td:contains("∑ Total")').css('font-weight', '700').parent().css('background', '#dce8fe');
+        pivotUI.find('td:contains("\u2211 Total")').css('font-weight', '700').parent().css('background', '#dce8fe');
       }
     };
 
-    $(target).pivotUI(filtered, opts, true);
+    try {
+      $(target).pivotUI(filtered, opts, true);
+    } catch(e) {
+      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '</div>';
+    }
 
     if (cfg.chart) drawWeeklyChart(applyFilter(src, cfg.filter));
   }
