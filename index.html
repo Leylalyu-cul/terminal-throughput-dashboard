@@ -6,7 +6,6 @@
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     body { background: #f4f6f9; font-family: 'Segoe UI', Arial, sans-serif; }
     .navbar { background: #1a3c6e; }
@@ -16,21 +15,18 @@
     .card-header { background: #fff; border-bottom: 2px solid #e8ecf0; font-weight: 600; font-size: 0.95rem; padding: 12px 16px; }
     .nav-tabs .nav-link { color: #555; font-weight: 500; border-radius: 8px 8px 0 0; margin-right: 4px; }
     .nav-tabs .nav-link.active { background: #1a3c6e; color: #fff; }
-    .pivotTable .p-ui-widget { font-size: 13px; }
     .pvtVal { background: #eaf2ff; font-weight: 600; }
     .pvtGrandTotal { background: #1a3c6e !important; color: #fff !important; font-weight: 700; }
     .preset-btns { margin-bottom: 12px; }
     .preset-btns .btn { font-size: 0.8rem; padding: 3px 10px; }
     .preset-btns .btn.active { background: #1a3c6e; color: #fff; border-color: #1a3c6e; }
     .info-bar { font-size: 0.8rem; color: #888; margin-bottom: 6px; }
-    #spinner { display: none; text-align: center; padding: 40px; color: #888; }
-    .tab-content { padding-top: 12px; }
-    .tab-legend { font-size: 0.78rem; color: #888; padding: 4px 0; }
+    .tab-legend { font-size: 0.78rem; color: #888; }
     .tab-legend strong { color: #555; }
-    .pvtRenderer { min-width: 200px; }
     .pvtTable { font-size: 12px; }
-    .chart-wrap { position: relative; height: 260px; margin-bottom: 12px; }
-    .chart-wrap canvas { max-height: 260px; }
+    .chart-container { position: relative; height: 300px; background: #fff; border-radius: 6px; margin-bottom: 16px; padding: 12px; border: 1px solid #e0e6ed; }
+    .chart-container canvas { max-height: 276px; }
+    #spinner { display: none; text-align: center; padding: 40px; color: #888; }
   </style>
 </head>
 <body>
@@ -43,235 +39,180 @@
 </nav>
 
 <div class="container-fluid px-3">
-  <!-- Tabs -->
   <ul class="nav nav-tabs" id="pivotTabs" role="tablist"></ul>
   <div class="tab-content" id="pivotTabContent">
-    <div id="spinner"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading pivot table...</div></div>
+    <div id="spinner"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading data...</div></div>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Load scripts in correct order -->
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/export_renderers.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-// ── Tab configuration: mirrors Excel pivot_table.py field settings ──────────
-// Excel sheet field mapping:
-//   Port x Month       → Row:Port, Col:ATD Month, Filter:ATD_Year=2026, Val:Actual TEU
-//   Lane x Month      → Row:Lane,  Col:ATD Month, Filter:ATD_Year=2026, Val:Actual TEU
-//   Port x Lane x Type→ Row:Port+Lane, Col:TYPE+Load Status, Filter:ATD_Year=2026, Val:Actual TEU
-//   Weekly Trend      → Row:Week,  Col:(none), Filter:ATD_Year=2026, Val:Actual TEU
-//   Booking vs Actual → Row:Port,  Col:(none), Filter:ATD_Year=2026, Val:Booking TEU+Actual TEU+Gap+Fulfill Rate
-//   Outbound Report   → Row:Port, Col:ATD_Year+ATD Month, Filter:TYPE+Load Status+COC/SOC, Val:Actual TEU
-//   Inbound Report    → Row:Port, Col:ATD_Year+ATD Month, Filter:TYPE+Load Status+COC/SOC, Val:Actual TEU
-
-const tabs = [
-  {
-    id: 'port-month',
-    title: 'Port x Month',
-    rows: ['Port'],
-    cols: ['ATD Month'],
-    vals: ['Actual TEU'],
-    filter: { 'ATD_Year': '2026' },
-    preset: { 'ATD_Year': '2026' },
-    legend: 'Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU (Sum)'
-  },
-  {
-    id: 'lane-month',
-    title: 'Lane x Month',
-    rows: ['Lane'],
-    cols: ['ATD Month'],
-    vals: ['Actual TEU'],
-    filter: { 'ATD_Year': '2026' },
-    preset: { 'ATD_Year': '2026' },
-    legend: 'Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU (Sum)'
-  },
-  {
-    id: 'port-lane-type',
-    title: 'Port x Lane x Type',
-    rows: ['Port', 'Lane'],
-    cols: ['TYPE', 'Load Status'],
-    vals: ['Actual TEU'],
-    filter: { 'ATD_Year': '2026' },
-    preset: { 'ATD_Year': '2026' },
-    legend: 'Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU (Sum)'
-  },
-  {
-    id: 'weekly-trend',
-    title: 'Weekly Trend',
-    rows: ['Week'],
-    cols: [],
-    vals: ['Actual TEU'],
-    filter: { 'ATD_Year': '2026' },
-    preset: { 'ATD_Year': '2026' },
-    legend: 'Row: Week | Col: (none) | Filter: ATD_Year=2026 | Val: Actual TEU (Sum)'
-  },
-  {
-    id: 'booking',
-    title: 'Booking vs Actual',
-    rows: ['Port'],
-    cols: [],
-    vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate (Avg)'],
-    filter: { 'ATD_Year': '2026' },
-    preset: { 'ATD_Year': '2026' },
-    legend: 'Row: Port | Col: (none) | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Gap + Fulfill Rate'
-  },
-  {
-    id: 'outbound',
-    title: 'Outbound Report',
-    rows: ['Port'],
-    cols: ['ATD_Year', 'ATD Month'],
-    vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    filter: { 'TYPE': ['OUT', 'T/S OUT'] },
-    preset: { 'TYPE': ['OUT', 'T/S OUT'] },
-    legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (OUT/T/S OUT), Load Status, COC/SOC, ATD_Year | Val: Actual TEU, VS. Last Year, VS. Last Month',
-    computed: true
-  },
-  {
-    id: 'inbound',
-    title: 'Inbound Report',
-    rows: ['Port'],
-    cols: ['ATD_Year', 'ATD Month'],
-    vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    filter: { 'TYPE': ['IN', 'T/S IN'] },
-    preset: { 'TYPE': ['IN', 'T/S IN'] },
-    legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (IN/T/S IN), Load Status, COC/SOC, ATD_Year | Val: Actual TEU, VS. Last Year, VS. Last Month',
-    computed: true
-  },
-];
-
 (async () => {
   const spinner = document.getElementById('spinner');
-
-  // ── Load data ──────────────────────────────────────────────────────────────
   spinner.style.display = 'block';
-  const zipResp = await fetch('data/pivot_data.zip');
-  const zipBlob = await zipResp.blob();
-  const zip = await JSZip.loadAsync(zipBlob);
-  const jsonFile = zip.file('pivot_data.json');
-  if (!jsonFile) { alert('pivot_data.json not found in zip!'); return; }
-  const data = JSON.parse(await jsonFile.async('string'));
-  document.getElementById('rowCount').textContent = data.length.toLocaleString();
 
-  // Show date range
-  const atds = data.map(r => r['ATD'] || '').filter(Boolean).sort();
-  document.getElementById('dataRange').textContent = atds[0] + ' ~ ' + atds[atds.length - 1];
+  // ── Load data ───────────────────────────────────────────────────────────────
+  const zipResp = await fetch('data/pivot_data.zip');
+  const zip = await JSZip.loadAsync(await zipResp.blob());
+  const jsonFile = zip.file('pivot_data.json');
+  if (!jsonFile) { alert('pivot_data.json not found!'); return; }
+  const rawData = JSON.parse(await jsonFile.async('string'));
   spinner.style.display = 'none';
 
-  // ── Pre-compute "VS. Last Year" and "VS. Last Month" for OB/IB reports ──
-  // These are "difference from previous year/month" — computed from raw data
+  document.getElementById('rowCount').textContent = rawData.length.toLocaleString();
+  const atds = rawData.map(r => r['ATD'] || '').filter(Boolean).sort();
+  document.getElementById('dataRange').textContent = atds[0] + ' ~ ' + atds[atds.length - 1];
+
+  // Pre-compute derived columns
+  rawData.forEach(r => {
+    r['Fulfill Rate'] = (r['Booking TEU'] > 0) ? r['Actual TEU'] / r['Booking TEU'] : 0;
+  });
+
+  // ── YoY / MoM helper for Outbound / Inbound reports ───────────────────────
   function buildYoYMoM(baseData) {
-    // Aggregate by Port × ATD_Year × ATD Month
-    const key = (r) => `${r.Port}|${r['ATD_Year']}|${r['ATD Month']}`;
     const agg = {};
     baseData.forEach(r => {
-      const k = key(r);
+      const k = `${r.Port}|${r['ATD_Year']}|${r['ATD Month']}`;
       if (!agg[k]) agg[k] = { Port: r.Port, ATD_Year: r['ATD_Year'], 'ATD Month': r['ATD Month'], 'Actual TEU': 0 };
       agg[k]['Actual TEU'] += (r['Actual TEU'] || 0);
     });
-
-    // Add VS. Last Year (same Port, same Month, prev year)
-    const prevYear = (yr) => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
-    // Add VS. Last Month (same Port, same Year, prev month)
-    const prevMonth = (mo) => {
+    const prevYear = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
+    const prevMonth = mo => {
       if (!mo) return '';
       const [y, m] = mo.split('-').map(Number);
       if (isNaN(y) || isNaN(m)) return '';
       const d = new Date(y, m - 2, 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     };
-
     const enriched = [];
-    const allKeys = Object.keys(agg).sort();
     const aggVal = (port, yr, mo) => {
       const k = `${port}|${yr}|${mo}`;
       return agg[k] ? agg[k]['Actual TEU'] : 0;
     };
-
-    allKeys.forEach(k => {
+    Object.keys(agg).forEach(k => {
       const r = { ...agg[k] };
-      const ly = prevYear(r.ATD_Year);
-      const lm = prevMonth(r['ATD Month']);
-      r['VS. Last Year']  = r['Actual TEU'] - aggVal(r.Port, ly, r['ATD Month']);
-      r['VS. Last Month'] = r['Actual TEU'] - aggVal(r.Port, r.ATD_Year, lm);
+      r['VS. Last Year']  = r['Actual TEU'] - aggVal(r.Port, prevYear(r.ATD_Year), r['ATD Month']);
+      r['VS. Last Month'] = r['Actual TEU'] - aggVal(r.Port, r.ATD_Year, prevMonth(r['ATD Month']));
       enriched.push(r);
     });
     return enriched;
   }
 
-  // Pre-compute OB and IB enriched datasets
-  const dataOB = buildYoYMoM(data.filter(r => ['OUT', 'T/S OUT'].includes(r.TYPE)));
-  const dataIB = buildYoYMoM(data.filter(r => ['IN', 'T/S IN'].includes(r.TYPE)));
+  const dataOB = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r.TYPE)));
+  const dataIB = buildYoYMoM(rawData.filter(r => ['IN', 'T/S IN'].includes(r.TYPE)));
+  const computedMap = { outbound: dataOB, inbound: dataIB };
 
-  // ── Render tabs ────────────────────────────────────────────────────────────
-  const tabList   = document.getElementById('pivotTabs');
+  // ── Tab configs (mirrors Excel pivot_table.py) ────────────────────────────
+  const tabs = [
+    {
+      id: 'port-month', title: 'Port x Month',
+      rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
+    },
+    {
+      id: 'lane-month', title: 'Lane x Month',
+      rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
+    },
+    {
+      id: 'port-lane-type', title: 'Port x Lane x Type',
+      rows: ['Port', 'Lane'], cols: ['TYPE', 'Load Status'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU'
+    },
+    {
+      id: 'weekly-trend', title: 'Weekly Trend',
+      rows: ['Week'], cols: [], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Week | Filter: ATD_Year=2026 | Val: Actual TEU',
+      chart: true
+    },
+    {
+      id: 'booking', title: 'Booking vs Actual',
+      rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Gap', 'Fulfill Rate'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Gap + Fulfill Rate'
+    },
+    {
+      id: 'outbound', title: 'Outbound Report',
+      rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+      filter: { 'TYPE': ['OUT', 'T/S OUT'] },
+      computed: true,
+      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (OUT/T/S OUT) | Val: Actual TEU + VS. Last Year + VS. Last Month'
+    },
+    {
+      id: 'inbound', title: 'Inbound Report',
+      rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+      filter: { 'TYPE': ['IN', 'T/S IN'] },
+      computed: true,
+      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (IN/T/S IN) | Val: Actual TEU + VS. Last Year + VS. Last Month'
+    }
+  ];
+
+  // ── Build tab DOM ───────────────────────────────────────────────────────────
+  const tabList    = document.getElementById('pivotTabs');
   const tabContent = document.getElementById('pivotTabContent');
 
   tabs.forEach((cfg, idx) => {
     const tabId = 'tab-' + cfg.id;
     tabList.innerHTML += `<li class="nav-item" role="presentation">
-      <button class="nav-link ${idx === 0 ? 'active' : ''}" id="${tabId}-btn"
+      <button class="nav-link${idx === 0 ? ' active' : ''}" id="${tabId}-btn"
         data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button></li>`;
-    const chartCanvas = cfg.id === 'weekly-trend'
-      ? `<div class="chart-wrap"><canvas id="chart-${cfg.id}"></canvas></div>` : '';
+
+    const chartDiv = cfg.chart
+      ? `<div class="chart-container"><canvas id="chart-${cfg.id}"></canvas></div>` : '';
+
     tabContent.innerHTML += `
-      <div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="${tabId}" role="tabpanel">
+      <div class="tab-pane fade${idx === 0 ? ' show active' : ''}" id="${tabId}" role="tabpanel">
         <div class="card mt-2">
           <div class="card-header"><span>Field Layout: </span><span class="tab-legend">${cfg.legend}</span></div>
-          <div class="card-body p-2">${chartCanvas}<div id="pivot-${cfg.id}"></div></div>
+          <div class="card-body p-2">${chartDiv}<div id="pivot-${cfg.id}"></div></div>
         </div>
       </div>`;
   });
 
-  // Bootstrap tab init
-  if (window.bootstrap) {
-    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => new bootstrap.Tab(t));
-  }
+  // Init Bootstrap tabs
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => new bootstrap.Tab(t));
 
-  // Pre-compute Fulfill Rate per row so pivot can aggregate by average
-  data.forEach(r => {
-    r['Fulfill Rate'] = (r['Booking TEU'] > 0) ? r['Actual TEU'] / r['Booking TEU'] : 0;
-  });
-
-  const dataMap = { 'outbound': dataOB, 'inbound': dataIB };
-
-
-
-
-
-
-
-
-
-
-
-
-  // Line chart for Weekly Trend tab
+  // ── Chart instance ─────────────────────────────────────────────────────────
   let weeklyChart = null;
+
   function drawWeeklyChart(filtered) {
     const canvas = document.getElementById('chart-weekly-trend');
     if (!canvas) return;
-    // Aggregate by Week, sorted chronologically
+
     const byWeek = {};
     filtered.forEach(r => {
-      const w = r.Week || '';
+      const w = String(r.Week || '');
+      if (!w) return;
       byWeek[w] = (byWeek[w] || 0) + (r['Actual TEU'] || 0);
     });
-    const sorted = Object.keys(byWeek).sort();
+
+    const sorted = Object.keys(byWeek).sort((a, b) => Number(a) - Number(b));
     const values = sorted.map(w => byWeek[w]);
 
     if (weeklyChart) weeklyChart.destroy();
+
     weeklyChart = new Chart(canvas, {
       type: 'line',
       data: {
-        labels: sorted,
+        labels: sorted.map(w => 'W' + w),
         datasets: [{
           label: 'Actual TEU',
           data: values,
           borderColor: '#1a3c6e',
-          backgroundColor: 'rgba(26,60,110,0.08)',
-          borderWidth: 2,
+          backgroundColor: 'rgba(26,60,110,0.1)',
+          borderWidth: 2.5,
           pointRadius: 4,
           pointBackgroundColor: '#4fc3f7',
           tension: 0.3,
@@ -285,67 +226,54 @@ const tabs = [
           legend: { display: true, position: 'top', labels: { font: { size: 12 } } },
           tooltip: {
             callbacks: {
+              title: ctx => 'Week ' + ctx[0].label,
               label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} TEU`
             }
           }
         },
         scales: {
-          x: { ticks: { maxRotation: 45, font: { size: 11 } } },
-          y: { ticks: { font: { size: 11 } }, beginAtZero: true }
+          x: { title: { display: true, text: 'Week' }, ticks: { maxRotation: 45, font: { size: 11 } } },
+          y: { title: { display: true, text: 'Actual TEU' }, ticks: { font: { size: 11 } }, beginAtZero: true }
         }
       }
     });
   }
 
-  function renderPivot(cfg, sourceData) {
-    const target = document.getElementById('pivot-' + cfg.id);
-    target.innerHTML = '';
-
-    // Apply preset filter
-    const filtered = sourceData.filter(row => {
-      for (const [k, v] of Object.entries(cfg.filter || {})) {
+  // ── Render pivot ───────────────────────────────────────────────────────────
+  function applyFilter(dataSrc, filter) {
+    return dataSrc.filter(row => {
+      for (const [k, v] of Object.entries(filter || {})) {
         const rv = String(row[k] ?? '');
         if (Array.isArray(v)) { if (!v.includes(rv)) return false; }
         else { if (rv !== v) return false; }
       }
       return true;
     });
+  }
 
-    const opts = {
+  function renderPivot(cfg) {
+    const src = cfg.computed ? computedMap[cfg.id] : rawData;
+    const filtered = applyFilter(src, cfg.filter);
+    const target = document.getElementById('pivot-' + cfg.id);
+    target.innerHTML = '';
+
+    $(target).pivotUI(filtered, {
       rows: cfg.rows,
       cols: cfg.cols,
       vals: cfg.vals,
       aggregatorName: 'Integer Sum',
-      onRefresh: function (pivotUI) {
+      onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
       }
-    };
+    }, true);
 
-    $(target).pivotUI(filtered, opts, true);
-
-    if (cfg.id === 'weekly-trend') {
-      drawWeeklyChart(filtered);
-    }
+    if (cfg.chart) drawWeeklyChart(filtered);
   }
 
-  // Render first tab immediately
-  renderPivot(tabs[0], tabs[0].computed ? dataMap[tabs[0].id] : data);
-
-  // Lazy render on tab switch
-  let rendered = new Set([0]);
-  document.querySelectorAll('[data-bs-toggle="tab"]').forEach((btn, i) => {
-    btn.addEventListener('shown.bs.tab', () => {
-      if (!rendered.has(i)) {
-        const cfg = tabs[i];
-        const src = cfg.computed ? dataMap[cfg.id] : data;
-        renderPivot(cfg, src);
-        rendered.add(i);
-      }
-    });
-  });
+  // ── Init: render all tabs immediately ─────────────────────────────────────
+  tabs.forEach(cfg => renderPivot(cfg));
 
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
