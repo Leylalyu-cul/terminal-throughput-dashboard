@@ -59,7 +59,7 @@
     </div>
 
     <div class="tab-pane fade" id="tab-booking-actual">
-      <div class="legend">Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate</div>
+      <div class="legend">Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate (Avg)</div>
       <div id="pivot-booking-actual" class="pivot-wrap"></div>
     </div>
 
@@ -190,7 +190,7 @@ function initDashboard() {
     const seen = new Set();
     if (Array.isArray(data) && data.length > 0) {
       Object.keys(data[0]).forEach(k => {
-        if (!seen.has(k)) { seen.add(k); fields.push({ name: k, caption: fieldCaptionMap[k] || k }); }
+        if (!seen.has(k) && k !== 'Lane Trade') { seen.add(k); fields.push({ name: k, caption: fieldCaptionMap[k] || k }); }
       });
     }
 
@@ -198,7 +198,7 @@ function initDashboard() {
     const slice = {};
     if (rows && rows.length) slice.rows = rows.map(f => ({ uniqueName: f }));
     if (cols && cols.length) slice.columns = cols.map(f => ({ uniqueName: f }));
-    if (vals && vals.length) slice.values = vals.map(f => ({ uniqueName: f, aggregation: f === 'Fulfill Rate' ? 'average' : 'sum' }));
+    if (vals && vals.length) slice.values = vals.map(f => ({ uniqueName: f, aggregation: f === 'Fulfill Rate (Avg)' ? 'average' : 'sum' }));
     if (filters && filters.length) slice.filters = filters.map(f => ({ uniqueName: f }));
 
     // month/numeric sort
@@ -224,11 +224,13 @@ function initDashboard() {
     });
   }
 
-  // Field caption map
+  // Field caption map — keys match actual data field names
   const fm = {
-    'Port': 'Port', 'Lane': 'Lane', 'TYPE': 'TYPE', 'Load Status': 'Load Status',
+    'Port': 'Port', 'Lane': 'Lane', 'Lane Trade': 'Lane Trade',
+    'TYPE': 'TYPE', 'Load Status': 'Load Status',
     'ATD Month': 'ATD Month', 'ATD_Year': 'ATD Year', 'Week': 'Week',
-    'COC-SOC': 'COC-SOC', 'Actual TEU': 'Actual TEU', 'Booking TEU': 'Booking TEU', 'Fulfill Rate': 'Fulfill Rate',
+    'COC/SOC': 'COC/SOC', 'Actual TEU': 'Actual TEU', 'Booking TEU': 'Booking TEU',
+    'Fulfill Rate (Avg)': 'Fulfill Rate',
     'VS. Last Year': 'VS. Last Year', 'VS. Last Month': 'VS. Last Month'
   };
 
@@ -256,7 +258,7 @@ function initDashboard() {
 
   // Booking vs Actual
   fmPivot('pivot-booking-actual', dataY2026,
-    ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
+    ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate (Avg)'],
     ['ATD_Year']);
 
   // Outbound
