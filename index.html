@@ -252,27 +252,42 @@
   // PivotTable.js has no native subtotal. We insert a synthetic "〔Total〕" Lane
   // row per Port so it appears as a real row in the table.
   function addPortSubtotals(data) {
-    // group by Port
+    // For each (Port, TYPE, Load Status) combination, generate a 〔Port Total〕 Lane row
+    // so that every column in the pivot has a value in the subtotal row.
     const portMap = {};
     data.forEach(r => {
       const p = String(r['Port'] || '');
       if (!portMap[p]) portMap[p] = [];
       portMap[p].push(r);
     });
+
     const result = [];
     Object.entries(portMap).forEach(([port, rows]) => {
-      // Insert subtotal row FIRST so it appears at the top of each Port group
-      const sub = {};
-      // copy all keys from first row, zero out numeric ones
-      Object.keys(rows[0]).forEach(k => { sub[k] = rows[0][k]; });
-      sub['Port'] = port;
-      sub['Lane'] = '〔Port Total〕';
-      // Sum numeric fields
-      const numKeys = ['Actual TEU', 'Booking TEU', 'Fulfill Rate'];
-      numKeys.forEach(k => {
-        sub[k] = rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+      // Group by (TYPE, Load Status) within this Port
+      const comboMap = {};
+      rows.forEach(r => {
+        const ck = String(r['TYPE'] || '') + '|||' + String(r['Load Status'] || '');
+        if (!comboMap[ck]) comboMap[ck] = { TYPE: r['TYPE'], 'Load Status': r['Load Status'], 'Actual TEU': 0, 'Booking TEU': 0 };
+        comboMap[ck]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
+        comboMap[ck]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
       });
-      result.push(sub);
+
+      // One 〔Port Total〕 row per combo
+      Object.values(comboMap).forEach(combo => {
+        const sub = {};
+        // Copy non-critical fields from first row as context
+        Object.keys(rows[0]).forEach(k => { sub[k] = rows[0][k]; });
+        sub['Port']         = port;
+        sub['Lane']         = '〔Port Total〕';
+        sub['TYPE']         = combo['TYPE'];
+        sub['Load Status']  = combo['Load Status'];
+        sub['Actual TEU']   = combo['Actual TEU'];
+        sub['Booking TEU']  = combo['Booking TEU'];
+        sub['Fulfill Rate'] = combo['Booking TEU'] > 0 ? combo['Actual TEU'] / combo['Booking TEU'] : 0;
+        result.push(sub);
+      });
+
+      // Then all original rows for this Port
       rows.forEach(r => result.push(r));
     });
     return result;
