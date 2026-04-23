@@ -1,93 +1,129 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@30.0.6/styles/ag-grid.css">
-  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@30.0.6/styles/ag-theme-balham.css">
-  <script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
-  <script src="https://unpkg.com/bootstrap@3.4.1/dist/js/bootstrap.min.js"></script>
-  <script src="https://unpkg.com/ag-grid-community@30.0.6/dist/ag-grid-community.min.noHeader.js"></script>
-  <script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
-    body { font-family: Arial, sans-serif; background: #f5f7fa; margin: 0; padding: 0; }
-    .nav-tabs { margin-bottom: 0; background: #fff; padding: 0 20px; border-bottom: 2px solid #ddd; }
-    .nav-tabs > li > a { color: #555; font-weight: 600; border-radius: 0; padding: 12px 20px; }
-    .nav-tabs > li.active > a { border-top: 3px solid #2c5aa0; color: #2c5aa0; }
-    .tab-content { background: #fff; min-height: 600px; }
-    .tab-pane { padding: 15px; }
-    .legend { background: #eef3fb; border: 1px solid #c5d5ea; border-radius: 4px; padding: 8px 14px; font-size: 12px; color: #2c5aa0; margin-bottom: 10px; }
-    #chart-container { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin-bottom: 15px; height: 260px; }
-    .ag-theme-balham .ag-row.row-port-total { background: #dce8fe !important; font-weight: 700; }
-    .ag-theme-balham .ag-row.row-port-total .ag-cell { color: #1a3a8f; }
-    .ag-theme-balham .ag-row.row-group { font-weight: 600; }
-    .subtitle { font-size: 11px; color: #888; margin-top: 3px; }
-    .tab-count { background: #2c5aa0; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
-    #chart-weekly-canvas { max-height: 180px; }
-    .pivot-field-list { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin-bottom: 10px; }
-    .pivot-field-list .field-item { display: inline-block; background: #e3ebf9; border: 1px solid #b3c6e8; border-radius: 4px; padding: 4px 10px; margin: 3px; font-size: 12px; color: #2c5aa0; cursor: default; }
-    .pivot-field-list .field-label { font-weight: 700; margin-bottom: 6px; color: #555; font-size: 11px; text-transform: uppercase; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; }
+    .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
+    .tab-content { background: #fff; border: 1px solid #dee2e6; border-top: none; padding: 16px; min-height: 600px; }
+    .legend { font-size: 12px; color: #888; margin-bottom: 10px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px; }
+    .tab-pane { position: relative; }
+    .pivot-wrap { width: 100%; height: 580px; }
+    #chart-weekly-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
+    .error-msg { color: #dc3545; font-size: 16px; padding: 20px; }
+    .loading { text-align: center; padding: 40px; color: #666; font-size: 16px; }
   </style>
 </head>
 <body>
 
-<div class="container-fluid" style="padding:0">
-  <div style="background:#2c5aa0; color:#fff; padding:14px 24px; font-size:18px; font-weight:700;">
-    Terminal Throughput Dashboard
-    <span style="font-size:12px; font-weight:400; opacity:0.8; margin-left:12px;">— 2026 —</span>
-  </div>
+<div class="container-fluid p-3">
+  <h4 class="mb-3">📊 Terminal Throughput Dashboard</h4>
 
-  <ul class="nav nav-tabs" id="mainTabs" role="tablist"></ul>
+  <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-port-month">Port × Month</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-lane-month">Lane × Month</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-port-lane-type">Port × Lane × Type</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">Weekly Trend</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-booking-actual">Booking vs Actual</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-outbound">Outbound Report</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-inbound">Inbound Report</a></li>
+  </ul>
 
   <div class="tab-content" id="mainTabContent">
-    <div role="tabpanel" class="tab-pane" id="tab-port-month"><div class="legend"></div><div id="grid-port-month" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
-    <div role="tabpanel" class="tab-pane" id="tab-lane-month"><div class="legend"></div><div id="grid-lane-month" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
-    <div role="tabpanel" class="tab-pane" id="tab-port-lane-type"><div class="legend"></div><div id="grid-port-lane-type" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
-    <div role="tabpanel" class="tab-pane" id="tab-weekly-trend">
-      <div class="legend"></div>
-      <div id="chart-container"><canvas id="chart-weekly-canvas"></canvas></div>
-      <div id="grid-weekly-trend" class="ag-theme-balham" style="height:400px;width:100%"></div>
+
+    <div class="tab-pane fade show active" id="tab-port-month">
+      <div class="legend">Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU</div>
+      <div id="pivot-port-month" class="pivot-wrap"></div>
     </div>
-    <div role="tabpanel" class="tab-pane" id="tab-booking-actual"><div class="legend"></div><div id="grid-booking-actual" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
-    <div role="tabpanel" class="tab-pane" id="tab-outbound"><div class="legend"></div><div id="grid-outbound" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
-    <div role="tabpanel" class="tab-pane" id="tab-inbound"><div class="legend"></div><div id="grid-inbound" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
+
+    <div class="tab-pane fade" id="tab-lane-month">
+      <div class="legend">Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU</div>
+      <div id="pivot-lane-month" class="pivot-wrap"></div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-port-lane-type">
+      <div class="legend">Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU</div>
+      <div id="pivot-port-lane-type" class="pivot-wrap"></div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-weekly-trend">
+      <div class="legend">Row: Week | Filter: ATD_Year=2026 | Val: Actual TEU</div>
+      <div id="chart-weekly-wrap">
+        <canvas id="chart-weekly-canvas"></canvas>
+      </div>
+      <div id="pivot-weekly-trend" class="pivot-wrap"></div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-booking-actual">
+      <div class="legend">Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate</div>
+      <div id="pivot-booking-actual" class="pivot-wrap"></div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-outbound">
+      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS. Last Year + VS. Last Month</div>
+      <div id="pivot-outbound" class="pivot-wrap"></div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-inbound">
+      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS. Last Year + VS. Last Month</div>
+      <div id="pivot-inbound" class="pivot-wrap"></div>
+    </div>
+
   </div>
 </div>
 
-<script>
-// ─── DATA ────────────────────────────────────────────────────────────────────
-let rawData = [];
-let grids = {}; // cache grid instances
+<!-- JSZip (for unzipping data) -->
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://unpkg.com/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Chart.js -->
+<script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- Flexmonster -->
+<link rel="stylesheet" href="https://cdn.flexmonster.com/2.9.4/flexmonster.min.css">
+<script src="https://cdn.flexmonster.com/2.9.4/flexmonster.js"></script>
 
+<script>
+// ─── DATA LOADING ─────────────────────────────────────────────────────────────
+let rawData = [];
+let weeklyChart = null;
+
+// Load from zip file (JSON is too large to upload directly to GitHub)
 fetch('data/pivot_data.zip')
-  .then(r => r.arrayBuffer())
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ': data/pivot_data.zip not found. Please upload pivot_data.zip to the data/ folder.');
+    return r.arrayBuffer();
+  })
   .then(buf => JSZip.loadAsync(buf))
   .then(zip => zip.file('pivot_data.json').async('string'))
-  .then(txt => { rawData = JSON.parse(txt); initDashboard(); })
+  .then(txt => JSON.parse(txt))
+  .then(data => {
+    rawData = data;
+    initDashboard();
+  })
   .catch(err => {
-    document.body.innerHTML += '<div style="padding:20px;color:red">Failed to load data: ' + err.message + '</div>';
-    console.error(err);
+    document.body.innerHTML +=
+      '<div class="error-msg" style="margin:40px">❌ ' + err.message + '</div>';
   });
 
-function initDashboard() {
-
-const prevYear  = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const prevYear = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
 const prevMonth = mo => {
   if (!mo) return '';
   const [y, m] = mo.split('-').map(Number);
   if (isNaN(y) || isNaN(m)) return '';
   const d = new Date(y, m - 2, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 };
 
 function buildYoYMoM(baseData, groupFields) {
   const aggMap = {};
   baseData.forEach(r => {
     const gf = groupFields.map(f => (r[f] ?? '')).join('|');
-    if (!aggMap[gf]) aggMap[gf] = { ...r, 'Actual TEU': 0 };
+    if (!aggMap[gf]) { aggMap[gf] = { ...r, 'Actual TEU': 0 }; }
     aggMap[gf]['Actual TEU'] += (r['Actual TEU'] || 0);
   });
   const valMap = {};
@@ -103,250 +139,137 @@ function buildYoYMoM(baseData, groupFields) {
   });
 }
 
-const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
-const dataOB    = buildYoYMoM(rawData.filter(r => ['OUT','T/S OUT'].includes(r.TYPE)), ['Port','ATD_Year','ATD Month']);
-const dataIB    = buildYoYMoM(rawData.filter(r => ['IN','T/S IN'].includes(r.TYPE)),  ['Port','ATD_Year','ATD Month']);
+function initDashboard() {
+  const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
+  const dataOB = buildYoYMoM(rawData.filter(r => ['OUT','T/S OUT'].includes(r.TYPE)), ['Port','ATD_Year','ATD Month']);
+  const dataIB = buildYoYMoM(rawData.filter(r => ['IN','T/S IN'].includes(r.TYPE)),  ['Port','ATD_Year','ATD Month']);
 
-// ─── CHART ────────────────────────────────────────────────────────────────────
-function drawWeeklyChart(data) {
-  const ctx = document.getElementById('chart-weekly-canvas');
-  if (!ctx) return;
-  const w2d = new Date().getTimezoneOffset();
-  // aggregate by week
-  const weekMap = {};
-  data.forEach(r => {
-    const w = String(r.Week || '');
-    if (!w) return;
-    weekMap[w] = (weekMap[w] || 0) + (r['Actual TEU'] || 0);
-  });
-  const labels = Object.keys(weekMap).sort((a,b) => {
-    const na = parseInt(a.replace(/\D/g,''));
-    const nb = parseInt(b.replace(/\D/g,''));
-    return na - nb;
-  });
-  const values = labels.map(l => weekMap[l]);
+  // ── Weekly chart ──────────────────────────────────────────────────────────
+  function drawWeeklyChart() {
+    const weekly = {};
+    dataY2026.forEach(r => {
+      const w = String(r['Week'] || '');
+      weekly[w] = (weekly[w] || 0) + (r['Actual TEU'] || 0);
+    });
+    const sorted = Object.entries(weekly).sort((a, b) => parseInt(a[0].replace('W','')) - parseInt(b[0].replace('W','')));
+    const labels = sorted.map(e => e[0]);
+    const values = sorted.map(e => e[1]);
 
-  if (window._weeklyChart) window._weeklyChart.destroy();
-  window._weeklyChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Actual TEU',
-        data: values,
-        borderColor: '#2c5aa0',
-        backgroundColor: 'rgba(44,90,160,0.1)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 4,
-        pointBackgroundColor: '#2c5aa0'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } } },
-      scales: {
-        y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
-        x: { title: { display: true, text: 'Week' } }
+    const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
+    if (weeklyChart) weeklyChart.destroy();
+    weeklyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Actual TEU',
+          data: values,
+          borderColor: '#2c5aa0',
+          backgroundColor: 'rgba(44,90,160,0.1)',
+          fill: true, tension: 0.3, pointRadius: 4,
+          pointBackgroundColor: '#2c5aa0'
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } } },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
+          x: { title: { display: true, text: 'Week' } }
+        }
       }
+    });
+  }
+
+  // ── FLEXMONSTER CONFIG ─────────────────────────────────────────────────────
+  const fmLicense = 'ZGlzaGxvd3xGTEVYTU9OU1RFUlx8MTYwNzQ1ODAwMDAwMDAwfHxodHRwczovL3d3dy5mbGV4bW9uc3Rlci5jb20v'; // open-source license
+
+  function fmPivot(divId, data, rows, cols, vals, filters, fieldCaptionMap) {
+    // Build flat fields list from data
+    const fields = [];
+    const seen = new Set();
+    if (Array.isArray(data) && data.length > 0) {
+      Object.keys(data[0]).forEach(k => {
+        if (!seen.has(k)) { seen.add(k); fields.push({ name: k, caption: fieldCaptionMap[k] || k }); }
+      });
     }
-  });
-}
 
-// ─── GRID HELPERS ─────────────────────────────────────────────────────────────
-function defaultColDef() {
-  return {
-    sortable: true, filter: true, resizable: true,
-    cellStyle: { textAlign: 'left' }
-  };
-}
+    // Build slice
+    const slice = {};
+    if (rows && rows.length) slice.rows = rows.map(f => ({ uniqueName: f }));
+    if (cols && cols.length) slice.columns = cols.map(f => ({ uniqueName: f }));
+    if (vals && vals.length) slice.values = vals.map(f => ({ uniqueName: f, aggregation: f === 'Fulfill Rate' ? 'average' : 'sum' }));
+    if (filters && filters.length) slice.filters = filters.map(f => ({ uniqueName: f }));
 
-function teuCol(field = 'Actual TEU') {
-  return {
-    field: field,
-    headerName: field,
-    aggFunc: 'sum',
-    cellStyle: { textAlign: 'right' },
-    valueFormatter: p => p.value != null ? p.value.toLocaleString() : ''
-  };
-}
-
-function initGrid(divId, rowData, colDefs, options = {}) {
-  const existing = grids[divId];
-  if (existing) { existing.setRowData([]); existing.destroy(); }
-
-  const defaultOpts = {
-    rowData: rowData,
-    columnDefs: colDefs,
-    defaultColDef: defaultColDef(),
-    animateRows: true,
-    suppressMovable: false,
-    enableRangeSelection: true,
-    enableCharts: false,
-  };
-  const merged = Object.assign(defaultOpts, options);
-
-  const gridDiv = document.getElementById(divId);
-  grids[divId] = new agGrid.Grid(gridDiv, merged);
-  return grids[divId];
-}
-
-// ─── PORT × LANE × TYPE  (row grouping by Port) ─────────────────────────────
-function renderPortLaneType() {
-  const cfg = { rows: ['Port','Lane'], cols: ['TYPE','Load Status'], vals: ['Actual TEU'], filter: { 'ATD_Year': '2026' } };
-  const src = dataY2026;
-  const filtered = applyFilter(src, cfg.filter);
-
-  const colDefs = [
-    { field: 'Port', rowGroup: true, hide: true },
-    { field: 'Lane', headerName: 'Lane', sortable: true, filter: true },
-    ...buildColsForCombo(['TYPE','Load Status'], 'Actual TEU', filtered),
-  ];
-
-  const legendEl = document.querySelector('#tab-port-lane-type .legend');
-  if (legendEl) legendEl.textContent = 'Row: Port + Lane  |  Col: TYPE + Load Status  |  Filter: ATD_Year=2026  |  Val: Actual TEU  |  (Drag Lane to Rows to re-group)';
-
-  initGrid('grid-port-lane-type', filtered, colDefs, {
-    autoGroupColumnDef: {
-      headerName: 'Port / Lane',
-      minWidth: 200,
-      cellRendererParams: { suppressCount: false }
-    },
-    groupDefaultExpanded: 0,
-    animateRows: true,
-    suppressAggFuncInHeader: false,
-  });
-}
-
-// ─── GENERIC TAB ──────────────────────────────────────────────────────────────
-function buildColsForCombo(cols, valField, data) {
-  // collect unique col combos
-  const comboSet = new Set();
-  data.forEach(r => {
-    comboSet.add(cols.map(f => r[f] ?? '').join('||'));
-  });
-  const combos = [...comboSet].sort();
-  return combos.map(combo => {
-    const parts = combo.split('||');
-    const colVal = parts.join(' × ');
-    return {
-      field: combo,
-      headerName: colVal,
-      aggFunc: 'sum',
-      cellStyle: { textAlign: 'right' },
-      valueFormatter: p => p.value != null ? p.value.toLocaleString() : '',
-      sortPriority: 0
+    // month/numeric sort
+    const sorting = {
+      rowFields: rows ? rows.map(f => ({ field: f })) : [],
+      columnFields: cols ? cols.map(f => ({ field: f })) : []
     };
-  });
-}
 
-function applyFilter(data, filter) {
-  return data.filter(row => {
-    for (const [k, v] of Object.entries(filter || {})) {
-      if (String(row[k] ?? '') !== v) return false;
-    }
-    return true;
-  });
-}
-
-function renderTab(cfg, divId, dataSrc) {
-  const filtered = applyFilter(dataSrc || rawData, cfg.filter);
-  const cols = cfg.cols.map(f => ({ field: f, sortable: true, filter: true }));
-  const vals = cfg.vals.map(f => ({
-    field: f,
-    headerName: f,
-    aggFunc: f === 'Fulfill Rate' ? 'avg' : 'sum',
-    cellStyle: { textAlign: 'right' },
-    valueFormatter: p => {
-      if (p.value == null) return '';
-      if (f === 'Fulfill Rate') return (p.value * 100).toFixed(1) + '%';
-      return p.value.toLocaleString();
-    }
-  }));
-  const colDefs = [
-    ...cfg.rows.map(f => ({ field: f, sortable: true, filter: true })),
-    ...cols,
-    ...vals
-  ];
-  const legendEl = document.querySelector('#' + divId + ' + .legend, #' + divId.replace('grid-','tab-') + ' .legend');
-  initGrid(divId, filtered, colDefs, {
-    groupDefaultExpanded: 0,
-    autoGroupColumnDef: { minWidth: 150 },
-  });
-}
-
-// ─── TAB INIT ─────────────────────────────────────────────────────────────────
-const tabs = [
-  {
-    id: 'port-month', title: 'Port × Month', data: dataY2026,
-    filter: { 'ATD_Year': '2026' },
-    rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
-    legend: 'Row: Port  |  Col: ATD Month  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
-  },
-  {
-    id: 'lane-month', title: 'Lane × Month', data: dataY2026,
-    filter: { 'ATD_Year': '2026' },
-    rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
-    legend: 'Row: Lane  |  Col: ATD Month  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
-  },
-  { id: 'port-lane-type', title: 'Port × Lane × Type', data: dataY2026, isSpecial: true },
-  {
-    id: 'weekly-trend', title: 'Weekly Trend', data: dataY2026,
-    filter: { 'ATD_Year': '2026' },
-    rows: ['Week'], cols: [], vals: ['Actual TEU'],
-    legend: 'Row: Week  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
-  },
-  {
-    id: 'booking-actual', title: 'Booking vs Actual', data: dataY2026,
-    filter: { 'ATD_Year': '2026' },
-    rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
-    legend: 'Row: Port  |  Filter: ATD_Year=2026  |  Val: Booking TEU + Actual TEU + Fulfill Rate'
-  },
-  {
-    id: 'outbound', title: 'Outbound Report', data: dataOB,
-    rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    legend: 'Row: Port  |  Col: ATD_Year + ATD Month  |  Val: Actual TEU + VS LY + VS LM'
-  },
-  {
-    id: 'inbound', title: 'Inbound Report', data: dataIB,
-    rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    legend: 'Row: Port  |  Col: ATD_Year + ATD Month  |  Val: Actual TEU + VS LY + VS LM'
-  },
-];
-
-tabs.forEach(tab => {
-  const li = document.createElement('li');
-  li.innerHTML = `<a href="#tab-${tab.id}" data-toggle="tab" role="tab">${tab.title}</a>`;
-  document.getElementById('mainTabs').appendChild(li);
-
-  // update legend div
-  const tabEl = document.getElementById('tab-' + tab.id);
-  const legendDiv = tabEl ? tabEl.querySelector('.legend') : null;
-  if (legendDiv && tab.legend) legendDiv.textContent = tab.legend;
-});
-
-$('#mainTabs a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
-  const id = e.target.getAttribute('href').replace('#tab-', '');
-  if (id === 'weekly-trend' && !window._weeklyChart) {
-    drawWeeklyChart(dataY2026);
+    new flexmonster({
+      container: divId,
+      licenseKey: fmLicense,
+      toolbar: true,
+      report: {
+        dataSource: { data: data },
+        schema: fields.map(f => ({ uniqueName: f.name, caption: f.caption })),
+        slice: slice,
+        options: {
+          grid: { type: 'flat', showGrandTotals: 'on', showRowTotals: 'on', showColumnTotals: 'on' },
+          configuratorActive: false,
+          viewing: { showAggregationLabels: true }
+        }
+      }
+    });
   }
-  if (!grids['grid-' + id]) {
-    const tab = tabs.find(t => t.id === id);
-    if (!tab) return;
-    if (tab.isSpecial) {
-      if (id === 'port-lane-type') renderPortLaneType();
-    } else {
-      renderTab({ filter: tab.filter, rows: tab.rows, cols: tab.cols, vals: tab.vals }, 'grid-' + id, tab.data);
-    }
-  }
-});
 
-// trigger first tab
-document.getElementById('mainTabs').querySelector('li').classList.add('active');
-document.getElementById('tab-port-month').classList.add('active');
+  // Field caption map
+  const fm = {
+    'Port': 'Port', 'Lane': 'Lane', 'TYPE': 'TYPE', 'Load Status': 'Load Status',
+    'ATD Month': 'ATD Month', 'ATD_Year': 'ATD Year', 'Week': 'Week',
+    'COC-SOC': 'COC-SOC', 'Actual TEU': 'Actual TEU', 'Booking TEU': 'Booking TEU', 'Fulfill Rate': 'Fulfill Rate',
+    'VS. Last Year': 'VS. Last Year', 'VS. Last Month': 'VS. Last Month'
+  };
 
-} // initDashboard
+  // ── INIT EACH TAB ───────────────────────────────────────────────────────────
+  // Port x Month
+  fmPivot('pivot-port-month', dataY2026,
+    ['Port'], ['ATD Month'], ['Actual TEU'],
+    ['ATD_Year']);
+
+  // Lane x Month
+  fmPivot('pivot-lane-month', dataY2026,
+    ['Lane'], ['ATD Month'], ['Actual TEU'],
+    ['ATD_Year']);
+
+  // Port x Lane x Type
+  fmPivot('pivot-port-lane-type', dataY2026,
+    ['Port', 'Lane'], ['TYPE', 'Load Status'], ['Actual TEU'],
+    ['ATD_Year']);
+
+  // Weekly Trend (chart + pivot)
+  drawWeeklyChart();
+  fmPivot('pivot-weekly-trend', dataY2026,
+    ['Week'], [], ['Actual TEU'],
+    ['ATD_Year']);
+
+  // Booking vs Actual
+  fmPivot('pivot-booking-actual', dataY2026,
+    ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
+    ['ATD_Year']);
+
+  // Outbound
+  fmPivot('pivot-outbound', dataOB,
+    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+    []);
+
+  // Inbound
+  fmPivot('pivot-inbound', dataIB,
+    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+    []);
+
+} // end initDashboard
 </script>
 </body>
 </html>
