@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body { background: #f4f6f9; font-family: 'Segoe UI', Arial, sans-serif; }
@@ -15,23 +14,72 @@
     .card-header { background: #fff; border-bottom: 2px solid #e8ecf0; font-weight: 600; font-size: 0.95rem; padding: 12px 16px; }
     .nav-tabs .nav-link { color: #555; font-weight: 500; border-radius: 8px 8px 0 0; margin-right: 4px; }
     .nav-tabs .nav-link.active { background: #1a3c6e; color: #fff; }
-    .pvtVal { background: #eaf2ff; font-weight: 600; }
-    .pvtGrandTotal { background: #1a3c6e !important; color: #fff !important; font-weight: 700; }
-    .preset-btns { margin-bottom: 12px; }
-    .preset-btns .btn { font-size: 0.8rem; padding: 3px 10px; }
-    .preset-btns .btn.active { background: #1a3c6e; color: #fff; border-color: #1a3c6e; }
-    .info-bar { font-size: 0.8rem; color: #888; margin-bottom: 6px; }
+    .info-bar { font-size: 0.85rem; color: rgba(255,255,255,0.7); }
     .tab-legend { font-size: 0.78rem; color: #888; }
     .tab-legend strong { color: #555; }
-    .pvtTable td[data-value="〔Port Total〕"],
-    .pvtTable th[data-value="〔Port Total〕"] {
-      background: #d0e4ff !important;
-      font-weight: 700 !important;
-      color: #1a3c6e !important;
-    }
     .chart-container { position: relative; height: 300px; background: #fff; border-radius: 6px; margin-bottom: 16px; padding: 12px; border: 1px solid #e0e6ed; }
     .chart-container canvas { max-height: 276px; }
-    #spinner { display: none; text-align: center; padding: 40px; color: #888; }
+
+    /* ── Custom Pivot Table Styles ── */
+    .pt-wrap { overflow-x: auto; }
+    table.pt {
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      width: 100%;
+      white-space: nowrap;
+    }
+    table.pt th, table.pt td {
+      border: 1px solid #dde2eb;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    /* col-group headers (TYPE / ATD_Year) */
+    table.pt th.col-top {
+      background: #1a3c6e;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+    /* sub-col headers (Load Status / ATD Month) */
+    table.pt th.col-sub {
+      background: #2e5fa3;
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+    /* row-group headers (Port / Lane / Week) */
+    table.pt th.row-hdr {
+      background: #f0f4fb;
+      text-align: left;
+      font-weight: 600;
+      color: #1a3c6e;
+      position: sticky;
+      left: 0;
+      z-index: 2;
+    }
+    /* subtotal rows */
+    table.pt tr.port-total td, table.pt tr.port-total th {
+      background: #d6e8ff !important;
+      font-weight: 700;
+      color: #1a3c6e;
+    }
+    table.pt tr.port-total td { border-top: 2px solid #4a8fe7; }
+    /* grand total */
+    table.pt tr.grand-total td, table.pt tr.grand-total th {
+      background: #1a3c6e !important;
+      color: #fff !important;
+      font-weight: 700;
+    }
+    /* data cells */
+    table.pt td.num { text-align: right; }
+    /* sort arrows */
+    .sort-arrow { cursor: pointer; margin-left: 4px; color: #aaa; font-size: 0.7rem; }
+    .sort-arrow.active { color: #4fc3f7; }
+    th.row-hdr .sort-arrow { float: right; }
+    .pct { color: #2e7d32; font-weight: 600; }
+    .pct.negative { color: #c62828; }
+    /* highlight on hover */
+    table.pt tbody tr:hover td:not(.no-hover) { background: #f5f8ff; }
   </style>
 </head>
 <body>
@@ -39,49 +87,46 @@
 <nav class="navbar navbar-expand-lg mb-3">
   <div class="container-fluid">
     <span class="navbar-brand">Terminal Throughput <span>Dashboard</span></span>
-    <span class="text-white-50" style="font-size:.85rem">2025–2026 YTD &nbsp;|&nbsp; <span id="rowCount">–</span> records &nbsp;|&nbsp; <span id="dataRange">–</span></span>
+    <span class="info-bar"><span id="rowCount">–</span> records &nbsp;|&nbsp; <span id="dataRange">–</span></span>
   </div>
 </nav>
 
 <div class="container-fluid px-3">
   <ul class="nav nav-tabs" id="pivotTabs" role="tablist"></ul>
-  <div class="tab-content" id="pivotTabContent">
-    <div id="spinner"><div class="spinner-border text-primary" role="status"></div><div class="mt-2">Loading data...</div></div>
-  </div>
+  <div class="tab-content" id="pivotTabContent"></div>
 </div>
 
-<!-- Load scripts in correct order -->
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/export_renderers.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
 (async () => {
-  const spinner = document.getElementById('spinner');
-  spinner.style.display = 'block';
+  const spinner = $('<div style="text-align:center;padding:40px;color:#888"><div class="spinner-border text-primary"></div><div class="mt-2">Loading data...</div></div>');
+  $('#pivotTabContent').append(spinner);
 
   // ── Load data ───────────────────────────────────────────────────────────────
   const zipResp = await fetch('data/pivot_data.zip');
-  const zip = await JSZip.loadAsync(await zipResp.blob());
+  const zip     = await JSZip.loadAsync(await zipResp.blob());
   const jsonFile = zip.file('pivot_data.json');
   if (!jsonFile) { alert('pivot_data.json not found!'); return; }
   const rawData = JSON.parse(await jsonFile.async('string'));
-  spinner.style.display = 'none';
+  spinner.remove();
 
-  document.getElementById('rowCount').textContent = rawData.length.toLocaleString();
+  $('#rowCount').text(rawData.length.toLocaleString());
   const atds = rawData.map(r => r['ATD'] || '').filter(Boolean).sort();
-  document.getElementById('dataRange').textContent = atds[0] + ' ~ ' + atds[atds.length - 1];
+  $('#dataRange').text(atds[0] + ' ~ ' + atds[atds.length - 1]);
 
-  // Pre-compute derived columns
+  // Derive columns
   rawData.forEach(r => {
-    r['Fulfill Rate'] = (r['Booking TEU'] > 0) ? r['Actual TEU'] / r['Booking TEU'] : 0;
+    r['Fulfill Rate'] = r['Booking TEU'] > 0 ? r['Actual TEU'] / r['Booking TEU'] : 0;
+    r['Gap']          = r['Actual TEU'] - (r['Booking TEU'] || 0);
+    r['VS. Last Year']  = 0;
+    r['VS. Last Month'] = 0;
   });
 
-  // ── YoY / MoM helper for Outbound / Inbound reports ───────────────────────
+  // ── YoY / MoM for Outbound / Inbound ───────────────────────────────────────
   function buildYoYMoM(baseData) {
     const agg = {};
     baseData.forEach(r => {
@@ -89,7 +134,7 @@
       if (!agg[k]) agg[k] = { Port: r.Port, ATD_Year: r['ATD_Year'], 'ATD Month': r['ATD Month'], 'Actual TEU': 0 };
       agg[k]['Actual TEU'] += (r['Actual TEU'] || 0);
     });
-    const prevYear = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
+    const prevYear  = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
     const prevMonth = mo => {
       if (!mo) return '';
       const [y, m] = mo.split('-').map(Number);
@@ -97,140 +142,440 @@
       const d = new Date(y, m - 2, 1);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     };
-    const enriched = [];
-    const aggVal = (port, yr, mo) => {
-      const k = `${port}|${yr}|${mo}`;
-      return agg[k] ? agg[k]['Actual TEU'] : 0;
-    };
-    Object.keys(agg).forEach(k => {
-      const r = { ...agg[k] };
-      r['VS. Last Year']  = r['Actual TEU'] - aggVal(r.Port, prevYear(r.ATD_Year), r['ATD Month']);
-      r['VS. Last Month'] = r['Actual TEU'] - aggVal(r.Port, r.ATD_Year, prevMonth(r['ATD Month']));
-      enriched.push(r);
-    });
-    return enriched;
+    const get = (p, y, m) => { const v = agg[`${p}|${y}|${m}`]; return v ? v['Actual TEU'] : 0; };
+    return Object.values(agg).map(r => ({
+      ...r,
+      'VS. Last Year':  r['Actual TEU'] - get(r.Port, prevYear(r.ATD_Year),  r['ATD Month']),
+      'VS. Last Month': r['Actual TEU'] - get(r.Port, r.ATD_Year,           prevMonth(r['ATD Month']))
+    }));
   }
 
   const dataOB = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r.TYPE)));
   const dataIB = buildYoYMoM(rawData.filter(r => ['IN', 'T/S IN'].includes(r.TYPE)));
-  const computedMap = { outbound: dataOB, inbound: dataIB };
 
-  // ── Tab configs (mirrors Excel pivot_table.py) ────────────────────────────
-  const tabs = [
-    {
-      id: 'port-month', title: 'Port x Month',
-      rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
-      filter: { 'ATD_Year': '2026' },
-      sortDesc: true,
-      legend: 'Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
-    },
-    {
-      id: 'lane-month', title: 'Lane x Month',
-      rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
-      filter: { 'ATD_Year': '2026' },
-      sortDesc: true,
-      legend: 'Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU'
-    },
-    {
-      id: 'port-lane-type', title: 'Port x Lane x Type',
-      rows: ['Port', 'Lane'], cols: ['TYPE', 'Load Status'], vals: ['Actual TEU'],
-      filter: { 'ATD_Year': '2026' },
-      sortDesc: true,
-      subtotalRows: true,
-      legend: 'Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU'
-    },
-    {
-      id: 'weekly-trend', title: 'Weekly Trend',
-      rows: ['Week'], cols: [], vals: ['Actual TEU'],
-      filter: { 'ATD_Year': '2026' },
-      legend: 'Row: Week | Filter: ATD_Year=2026 | Val: Actual TEU',
-      chart: true
-    },
-    {
-      id: 'booking', title: 'Booking vs Actual',
-      rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
-      filter: { 'ATD_Year': '2026' },
-      legend: 'Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate'
-    },
-    {
-      id: 'outbound', title: 'Outbound Report',
-      rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-      filter: { 'TYPE': ['OUT', 'T/S OUT'] },
-      computed: true,
-      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (OUT/T/S OUT) | Val: Actual TEU + VS. Last Year + VS. Last Month'
-    },
-    {
-      id: 'inbound', title: 'Inbound Report',
-      rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-      filter: { 'TYPE': ['IN', 'T/S IN'] },
-      computed: true,
-      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (IN/T/S IN) | Val: Actual TEU + VS. Last Year + VS. Last Month'
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  const fmt = v => v == null || v === '' ? '–' : Number(v).toLocaleString();
+  const fmtPct = v => {
+    if (!v || v === '–') return '<span class="pct">–</span>';
+    const pct = (v * 100).toFixed(1) + '%';
+    return `<span class="pct${v < 0 ? ' negative' : ''}">${pct}</span>`;
+  };
+  const monthKey  = s => { const p = String(s).split('-'); return p.length === 2 ? parseInt(p[0]) * 100 + parseInt(p[1]) : 0; };
+  const weekNum   = s => parseInt(String(s).replace(/\D/g, '')) || 0;
+  const esc       = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  function applyFilter(data, filter) {
+    return data.filter(row => {
+      for (const [k, v] of Object.entries(filter || {})) {
+        const rv = String(row[k] ?? '');
+        if (Array.isArray(v)) { if (!v.includes(rv)) return false; }
+        else { if (rv !== v) return false; }
+      }
+      return true;
+    });
+  }
+
+  // ── Sort by total desc ─────────────────────────────────────────────────────
+  function sortByTotalDesc(rows, rowKeys, valKey) {
+    const totals = {};
+    rows.forEach(r => {
+      const k = rowKeys.map(k => esc(r[k] ?? '')).join('||');
+      totals[k] = (totals[k] || 0) + (Number(r[valKey]) || 0);
+    });
+    return rows.slice().sort((a, b) => {
+      const ka = rowKeys.map(k => esc(a[k] ?? '')).join('||');
+      const kb = rowKeys.map(k => esc(b[k] ?? '')).join('||');
+      return (totals[kb] || 0) - (totals[ka] || 0);
+    });
+  }
+
+  // ── Shared aggregators (cell map + subtotals use same logic) ─────────────────
+  function buildAgg(data, rows, cols, vals) {
+    const colVals = cols.length ? getUniqueCombos(data, cols) : [[]];
+
+    // Sort col values
+    if (cols.length === 1 && cols[0] === 'ATD Month') {
+      colVals.sort((a, b) => monthKey(a[0]) - monthKey(b[0]));
+    } else if (cols.length === 1 && cols[0] === 'Week') {
+      colVals.sort((a, b) => weekNum(a[0]) - weekNum(b[0]));
+    } else if (cols.length === 2 && cols[0] === 'ATD_Year') {
+      // Group by year, sort by year, then by month within year
+      colVals.sort((a, b) => {
+        const ya = parseInt(a[0]) || 0, yb = parseInt(b[0]) || 0;
+        if (ya !== yb) return ya - yb;
+        return monthKey(a[1]) - monthKey(b[1]);
+      });
     }
-  ];
 
-  // ── Build tab DOM ───────────────────────────────────────────────────────────
-  const tabList    = document.getElementById('pivotTabs');
-  const tabContent = document.getElementById('pivotTabContent');
+    // Unique row keys
+    const rowKeys = [...new Set(data.map(r => rows.map(k => esc(r[k] ?? '')).join('||')))].filter(Boolean);
 
-  tabs.forEach((cfg, idx) => {
-    const tabId = 'tab-' + cfg.id;
-    tabList.innerHTML += `<li class="nav-item" role="presentation">
-      <button class="nav-link${idx === 0 ? ' active' : ''}" id="${tabId}-btn"
-        data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button></li>`;
+    // cell[rk+'||'+ck][v] = aggregated value
+    const cell = {};
+    data.forEach(r => {
+      const rk = rows.map(k => esc(r[k] ?? '')).join('||');
+      // ck = specific col combo for this row
+      const cv = cols.map(f => esc(r[f] ?? ''));
+      const ck = cols.length ? cv.join('||') : '__NONE__';
+      const key = rk + '||' + ck;
+      if (!cell[key]) cell[key] = {};
+      vals.forEach(v => { cell[key][v] = (cell[key][v] || 0) + (Number(r[v]) || 0); });
+    });
 
-    const chartDiv = cfg.chart
-      ? `<div class="chart-container"><canvas id="chart-weekly"></canvas></div>` : '';
+    return { colVals, rowKeys, cell };
+  }
 
-    tabContent.innerHTML += `
-      <div class="tab-pane fade${idx === 0 ? ' show active' : ''}" id="${tabId}" role="tabpanel">
-        <div class="card mt-2">
-          <div class="card-header"><span>Field Layout: </span><span class="tab-legend">${cfg.legend}</span></div>
-          <div class="card-body p-2">${chartDiv}<div id="pivot-${cfg.id}"></div></div>
-        </div>
-      </div>`;
-  });
+  function getUniqueCombos(data, fields) {
+    const seen = {};
+    data.forEach(r => {
+      const k = fields.map(f => esc(r[f] ?? '')).join('||');
+      if (!seen[k]) seen[k] = fields.map(f => r[f] ?? '');
+    });
+    return Object.values(seen);
+  }
 
-  // Init Bootstrap tabs
-  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => new bootstrap.Tab(t));
+  // ── Render Table ────────────────────────────────────────────────────────────
+  function renderTable(cfg, data) {
+    const filtered = applyFilter(data, cfg.filter);
+    const valKey   = cfg.vals[0];
+    const { colVals, rowKeys, cell } = buildAgg(filtered, cfg.rows, cfg.cols, cfg.vals);
 
-  // ── Chart instance ─────────────────────────────────────────────────────────
-  let weeklyChart = null;
+    const isFulfill   = cfg.vals.includes('Fulfill Rate');
+    const showPTotal = cfg.subtotalRows && cfg.rows.length >= 2;
+    const numRowHdrCols = cfg.rows.length;
 
-  function drawWeeklyChart(filtered) {
-    const canvas = document.getElementById('chart-weekly');
-    if (!canvas) return;
+    // Grand total
+    const grandTotal = {};
+    cfg.vals.forEach(v => {
+      grandTotal[v] = filtered.reduce((s, r) => s + (Number(r[v]) || 0), 0);
+    });
 
+    // ── THEAD ──────────────────────────────────────────────────────────────
+    let html = '<div class="pt-wrap"><table class="pt"><thead>';
+    const subHdrRows = cfg.cols.length === 2 ? 2 : (cfg.cols.length === 1 ? 1 : 0);
+
+    html += '<tr>';
+    html += `<th class="row-hdr" colspan="${numRowHdrCols}" rowspan="${subHdrRows + 1}">${esc(cfg.rows.join(' / '))}</th>`;
+
+    if (cfg.cols.length === 2) {
+      // Group sub-cols by top-level field (e.g. TYPE or ATD_Year)
+      const grp = {};
+      colVals.forEach(v => {
+        const top = esc(v[0]);
+        if (!grp[top]) grp[top] = [];
+        grp[top].push(v);
+      });
+      Object.entries(grp).forEach(([gk, gv]) => {
+        html += `<th class="col-top" colspan="${gv.length}">${gk}</th>`;
+      });
+    } else if (cfg.cols.length === 1) {
+      colVals.forEach(v => { html += `<th class="col-top">${esc(v[0])}</th>`; });
+    }
+
+    // Total col
+    const totalColspan = cfg.cols.length === 2
+      ? Object.values(
+          (() => {
+            const g = {}; colVals.forEach(v => { const t = esc(v[0]); if (!g[t]) g[t] = 0; g[t]++; }); return g;
+          })()
+        ).reduce((a, n) => a + n, 0)
+      : colVals.length;
+    html += `<th class="col-top" rowspan="${subHdrRows + 1}">Total</th>`;
+    html += '</tr>';
+
+    if (cfg.cols.length === 2) {
+      html += '<tr>';
+      colVals.forEach(v => { html += `<th class="col-sub">${esc(v[1])}</th>`; });
+      html += '</tr>';
+    }
+
+    html += '</thead><tbody>';
+
+    // ── Group by primary row key ────────────────────────────────────────────
+    const groups = {};
+    rowKeys.forEach(rk => {
+      const pk = rk.split('||')[0];
+      if (!groups[pk]) groups[pk] = [];
+      groups[pk].push(rk);
+    });
+
+    let portOrder = Object.keys(groups);
+    if (cfg.sortDesc) {
+      portOrder = portOrder.sort((a, b) => {
+        const sa = (groups[a] || []).reduce((s, k) => s + (cell[k + '||__NONE__']?.[valKey] || 0), 0);
+        const sb = (groups[b] || []).reduce((s, k) => s + (cell[k + '||__NONE__']?.[valKey] || 0), 0);
+        return sb - sa;
+      });
+    }
+
+    portOrder.forEach(pk => {
+      const keys = groups[pk] || [];
+
+      keys.forEach(rk => {
+        const subLabel = cfg.rows.length > 1 ? rk.split('||').slice(1).join(' / ') : '';
+        html += '<tr>';
+        if (cfg.rows.length > 1) {
+          html += `<th class="row-hdr">${esc(pk)}</th>`;
+          html += `<th class="row-hdr">${subLabel}</th>`;
+        } else {
+          html += `<th class="row-hdr">${esc(pk)}</th>`;
+        }
+
+        // Data cells (sum across all sub-rows of same parent port for each col)
+        colVals.forEach(cv => {
+          const ck = cv.join('||');
+          const v  = keys.reduce((s, k2) => s + (cell[k2 + '||' + ck]?.[valKey] || 0), 0);
+          html += `<td class="num">${isFulfill && valKey === 'Fulfill Rate' ? fmtPct(v) : fmt(v)}</td>`;
+        });
+
+        // Row total
+        const rowTot = keys.reduce((s, k2) => {
+          let st = 0;
+          colVals.forEach(cv => { st += cell[k2 + '||' + cv.join('||')]?.[valKey] || 0; });
+          return s + st;
+        }, 0);
+        html += `<td class="num" style="font-weight:700;background:#eaf2ff">${fmt(rowTot)}</td>`;
+        html += '</tr>';
+      });
+
+      // Port Total row
+      if (showPTotal) {
+        html += '<tr class="port-total">';
+        if (cfg.rows.length > 1) {
+          html += `<th class="row-hdr" colspan="${cfg.rows.length - 1}"></th>`;
+          html += `<th class="row-hdr">〔Port Total〕</th>`;
+        } else {
+          html += `<th class="row-hdr">〔Port Total〕</th>`;
+        }
+        colVals.forEach(cv => {
+          const ck = cv.join('||');
+          const v  = keys.reduce((s, k2) => s + (cell[k2 + '||' + ck]?.[valKey] || 0), 0);
+          html += `<td class="num">${isFulfill && valKey === 'Fulfill Rate' ? fmtPct(v) : fmt(v)}</td>`;
+        });
+        const pt = keys.reduce((s, k2) => {
+          let st = 0;
+          colVals.forEach(cv => { st += cell[k2 + '||' + cv.join('||')]?.[valKey] || 0; });
+          return s + st;
+        }, 0);
+        html += `<td class="num">${fmt(pt)}</td>`;
+        html += '</tr>';
+      }
+    });
+
+    // Grand Total
+    html += `<tr class="grand-total"><th class="row-hdr" colspan="${numRowHdrCols}">Grand Total</th>`;
+    colVals.forEach(() => { html += '<td>–</td>'; });
+    html += `<td>${fmt(grandTotal[valKey])}</td></tr>`;
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ── Booking vs Actual (special layout) ────────────────────────────────────
+  function renderBooking(cfg, data) {
+    const filtered = applyFilter(data, cfg.filter);
+    const byPort = {};
+    filtered.forEach(r => {
+      const p = esc(r.Port ?? '');
+      if (!byPort[p]) byPort[p] = { Port: p, 'Booking TEU': 0, 'Actual TEU': 0, 'Fulfill Rate': 0 };
+      byPort[p]['Booking TEU'] += (r['Booking TEU'] || 0);
+      byPort[p]['Actual TEU']  += (r['Actual TEU'] || 0);
+    });
+    const rows = Object.values(byPort).sort((a, b) => b['Actual TEU'] - a['Actual TEU']);
+
+    let html = '<div class="pt-wrap"><table class="pt"><thead><tr>';
+    ['Port', 'Booking TEU', 'Actual TEU', 'Fulfill Rate'].forEach(h => {
+      html += `<th class="col-top">${h}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      const fr = r['Booking TEU'] > 0 ? r['Actual TEU'] / r['Booking TEU'] : 0;
+      html += `<tr>
+        <th class="row-hdr">${r.Port}</th>
+        <td class="num">${fmt(r['Booking TEU'])}</td>
+        <td class="num">${fmt(r['Actual TEU'])}</td>
+        <td class="num">${fmtPct(fr)}</td>
+      </tr>`;
+    });
+    const totB = rows.reduce((s, r) => s + r['Booking TEU'], 0);
+    const totA = rows.reduce((s, r) => s + r['Actual TEU'], 0);
+    html += `<tr class="grand-total">
+      <th class="row-hdr">Grand Total</th>
+      <td>${fmt(totB)}</td>
+      <td>${fmt(totA)}</td>
+      <td>${fmtPct(totB > 0 ? totA / totB : 0)}</td>
+    </tr>`;
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ── Weekly Trend (flat table) ──────────────────────────────────────────────
+  function renderWeekly(cfg, data) {
+    const filtered = applyFilter(data, cfg.filter);
     const byWeek = {};
     filtered.forEach(r => {
-      const w = String(r.Week || '');
+      const w = String(r.Week ?? '');
+      if (!w) return;
+      if (!byWeek[w]) byWeek[w] = { Week: w, 'Actual TEU': 0 };
+      byWeek[w]['Actual TEU'] += (r['Actual TEU'] || 0);
+    });
+    const rows = Object.values(byWeek).sort((a, b) => weekNum(a.Week) - weekNum(b.Week));
+
+    let html = '<div class="pt-wrap"><table class="pt"><thead><tr>';
+    html += '<th class="col-top">Week</th><th class="col-top">Actual TEU</th>';
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      html += `<tr><th class="row-hdr">${esc(r.Week)}</th><td class="num">${fmt(r['Actual TEU'])}</td></tr>`;
+    });
+    const tot = rows.reduce((s, r) => s + r['Actual TEU'], 0);
+    html += `<tr class="grand-total"><th class="row-hdr">Grand Total</th><td>${fmt(tot)}</td></tr>`;
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ── OB / IB reports ─────────────────────────────────────────────────────────
+  function renderOBIB(cfg) {
+    const src = cfg.id === 'outbound' ? dataOB : dataIB;
+    // YoY/MoM data is already aggregated per (Port, Year, Month).
+    // cols=[ATD_Year, ATD Month] — use vals=['Actual TEU','VS. Last Year','VS. Last Month']
+    return renderOBIBTable(cfg, src);
+  }
+
+  function renderOBIBTable(cfg, data) {
+    const filtered = applyFilter(data, cfg.filter);
+    // Already pre-aggregated: one row per (Port, Year, Month)
+    const valKey = cfg.vals[0];
+
+    // colVals = unique (ATD_Year, ATD Month) from data
+    const colVals = [...new Map(filtered.map(r => {
+      const k = `${r.ATD_Year}||${r['ATD Month']}`;
+      return [k, [r.ATD_Year, r['ATD Month']]];
+    })).values()].sort((a, b) => {
+      const ya = parseInt(a[0]) || 0, yb = parseInt(b[0]) || 0;
+      if (ya !== yb) return ya - yb;
+      return monthKey(a[1]) - monthKey(b[1]);
+    });
+
+    // cell[port+'||'+ck][v] = { Actual TEU, VS. Last Year, VS. Last Month }
+    const cell = {};
+    filtered.forEach(r => {
+      const pk = esc(r.Port ?? '');
+      const ck = `${r.ATD_Year}||${r['ATD Month']}`;
+      const key = pk + '||' + ck;
+      if (!cell[key]) cell[key] = { 'Actual TEU': 0, 'VS. Last Year': 0, 'VS. Last Month': 0 };
+      cell[key]['Actual TEU']      += (r['Actual TEU'] || 0);
+      cell[key]['VS. Last Year']   += (r['VS. Last Year'] || 0);
+      cell[key]['VS. Last Month']  += (r['VS. Last Month'] || 0);
+    });
+
+    const rowKeys = [...new Set(filtered.map(r => esc(r.Port ?? '')))].filter(Boolean);
+    if (cfg.sortDesc) {
+      rowKeys.sort((a, b) => {
+        const sa = (cell[a + '||__NONE__']?.[valKey] || 0);
+        const sb = (cell[b + '||__NONE__']?.[valKey] || 0);
+        return sb - sa;
+      });
+    }
+
+    // Grand total
+    const grandTotal = { 'Actual TEU': 0, 'VS. Last Year': 0, 'VS. Last Month': 0 };
+    filtered.forEach(r => {
+      grandTotal['Actual TEU']     += (r['Actual TEU'] || 0);
+      grandTotal['VS. Last Year'] += (r['VS. Last Year'] || 0);
+      grandTotal['VS. Last Month']+= (r['VS. Last Month'] || 0);
+    });
+
+    // Col group headers (Year)
+    const yearGroups = {};
+    colVals.forEach(cv => {
+      const y = cv[0];
+      if (!yearGroups[y]) yearGroups[y] = [];
+      yearGroups[y].push(cv);
+    });
+
+    let html = '<div class="pt-wrap"><table class="pt"><thead>';
+
+    // Row + Year headers
+    html += '<tr>';
+    html += '<th class="row-hdr" rowspan="2">Port</th>';
+    Object.entries(yearGroups).forEach(([y, gv]) => {
+      const n = gv.length * 3; // 3 value cols per month (Actual, YoY, MoM)
+      html += `<th class="col-top" colspan="${n}">${y}</th>`;
+    });
+    html += `<th class="col-top" rowspan="2">Total</th></tr>`;
+
+    // Month headers
+    html += '<tr>';
+    colVals.forEach(cv => {
+      ['Actual TEU', 'VS. Last Year', 'VS. Last Month'].forEach(() => {
+        html += `<th class="col-sub">${esc(cv[1])}</th>`;
+      });
+    });
+    html += '</tr>';
+
+    html += '</thead><tbody>';
+
+    rowKeys.forEach(pk => {
+      html += '<tr>';
+      html += `<th class="row-hdr">${pk}</th>`;
+
+      let rowTotal = 0;
+      colVals.forEach(cv => {
+        const ck = `${cv[0]}||${cv[1]}`;
+        const v  = cell[pk + '||' + ck] || {};
+        ['Actual TEU', 'VS. Last Year', 'VS. Last Month'].forEach(val => {
+          const num = v[val] || 0;
+          if (val === 'Actual TEU') rowTotal += num;
+          const display = val === 'Actual TEU' ? fmt(num) : fmt(num);
+          const cls = val !== 'Actual TEU' && num < 0 ? 'negative' : '';
+          html += `<td class="num${cls?' '+cls:''}">${display}</td>`;
+        });
+      });
+
+      // Total col = sum of Actual TEU across all months
+      html += `<td class="num" style="font-weight:700;background:#eaf2ff">${fmt(rowTotal)}</td>`;
+      html += '</tr>';
+    });
+
+    // Grand Total
+    html += '<tr class="grand-total">';
+    html += `<th class="row-hdr">Grand Total</th>`;
+    colVals.forEach(() => {
+      html += `<td>–</td><td>–</td><td>–</td>`;
+    });
+    html += `<td>${fmt(grandTotal['Actual TEU'])}</td></tr>`;
+
+    html += '</tbody></table></div>';
+    return html;
+  }
+
+  // ── Chart ───────────────────────────────────────────────────────────────────
+  let weeklyChart = null;
+  function drawWeeklyChart(data) {
+    const filtered = applyFilter(data, { 'ATD_Year': '2026' });
+    const byWeek = {};
+    filtered.forEach(r => {
+      const w = String(r.Week ?? '');
       if (!w) return;
       byWeek[w] = (byWeek[w] || 0) + (r['Actual TEU'] || 0);
     });
-
     const sorted = Object.keys(byWeek).sort((a, b) => Number(a) - Number(b));
-    const values = sorted.map(w => byWeek[w]);
-
+    const canvas = document.getElementById('chart-weekly');
+    if (!canvas) return;
     if (weeklyChart) weeklyChart.destroy();
-
     weeklyChart = new Chart(canvas, {
       type: 'line',
       data: {
         labels: sorted.map(w => 'W' + w),
         datasets: [{
-          label: 'Actual TEU',
-          data: values,
-          borderColor: '#1a3c6e',
-          backgroundColor: 'rgba(26,60,110,0.1)',
-          borderWidth: 2.5,
-          pointRadius: 4,
-          pointBackgroundColor: '#4fc3f7',
-          tension: 0.3,
-          fill: true
+          label: 'Actual TEU', data: sorted.map(w => byWeek[w]),
+          borderColor: '#1a3c6e', backgroundColor: 'rgba(26,60,110,0.1)',
+          borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#4fc3f7',
+          tension: 0.3, fill: true
         }]
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: true, position: 'top', labels: { font: { size: 12 } } },
           tooltip: {
@@ -242,212 +587,86 @@
         },
         scales: {
           x: { title: { display: true, text: 'Week' }, ticks: { maxRotation: 45, font: { size: 11 } } },
-          y: { title: { display: true, text: 'Actual TEU' }, ticks: { font: { size: 11 } }, beginAtZero: true }
+          y: { title: { display: true, text: 'Actual TEU' }, beginAtZero: true }
         }
       }
     });
   }
 
-  // ── Port subtotal: compute aggregated values per Port for DOM injection ──
-  function computePortTotals(data) {
-    const map = {};
-    data.forEach(r => {
-      const p = String(r['Port'] || '');
-      if (!p) return;
-      if (!map[p]) map[p] = {};
-      const type  = String(r['TYPE'] || '');
-      const load  = String(r['Load Status'] || '');
-      const key   = type + '|||' + load;
-      map[p][key] = (map[p][key] || 0) + (Number(r['Actual TEU']) || 0);
-      map[p]['__total__'] = (map[p]['__total__'] || 0) + (Number(r['Actual TEU']) || 0);
-    });
-    return map;
-  }
+  // ── Tab configs ─────────────────────────────────────────────────────────────
+  const tabs = [
+    { id: 'port-month',    title: 'Port x Month',
+      rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }, sortDesc: true,
+      legend: 'Row: Port | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU' },
+    { id: 'lane-month',    title: 'Lane x Month',
+      rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }, sortDesc: true,
+      legend: 'Row: Lane | Col: ATD Month | Filter: ATD_Year=2026 | Val: Actual TEU' },
+    { id: 'port-lane-type',title: 'Port x Lane x Type',
+      rows: ['Port','Lane'], cols: ['TYPE','Load Status'], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' }, sortDesc: true, subtotalRows: true,
+      legend: 'Row: Port + Lane | Col: TYPE + Load Status | Filter: ATD_Year=2026 | Val: Actual TEU' },
+    { id: 'weekly-trend',  title: 'Weekly Trend',
+      rows: ['Week'], cols: [], vals: ['Actual TEU'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Week | Filter: ATD_Year=2026 | Val: Actual TEU', chart: true },
+    { id: 'booking',       title: 'Booking vs Actual',
+      rows: ['Port'], cols: [], vals: ['Booking TEU','Actual TEU','Fulfill Rate'],
+      filter: { 'ATD_Year': '2026' },
+      legend: 'Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate' },
+    { id: 'outbound',      title: 'Outbound Report',
+      rows: ['Port'], cols: ['ATD_Year','ATD Month'], vals: ['Actual TEU'],
+      filter: { 'TYPE': ['OUT','T/S OUT'] },
+      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (OUT/T/S OUT) | Val: Actual TEU + YoY + MoM' },
+    { id: 'inbound',       title: 'Inbound Report',
+      rows: ['Port'], cols: ['ATD_Year','ATD Month'], vals: ['Actual TEU'],
+      filter: { 'TYPE': ['IN','T/S IN'] },
+      legend: 'Row: Port | Col: ATD_Year + ATD Month | Filter: TYPE (IN/T/S IN) | Val: Actual TEU + YoY + MoM' },
+  ];
 
-  // ── Inject Port Total rows after pivotUI renders ───────────────────────
-  // Inject Port Total rows after pivotUI renders using MutationObserver
-  function injectPortTotalRows(table, portTotals) {
-    if (!table || !table.length) { console.warn('pvtTable not found'); return; }
+  // ── Build tab DOM ───────────────────────────────────────────────────────────
+  tabs.forEach((cfg, idx) => {
+    const tabId = 'tab-' + cfg.id;
+    $('#pivotTabs').append(`<li class="nav-item">
+      <button class="nav-link${idx===0?' active':''}" id="${tabId}-btn"
+        data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab">${cfg.title}</button>
+    </li>`);
 
-    // 1. Wait for table to have body rows (defer if needed)
-    function doInject() {
-      const thead = table.find('thead');
-      const headerRows = thead.find('tr');
-      if (headerRows.length < 2) { console.warn('Header rows < 2:', headerRows.length); return; }
+    const chartDiv = cfg.chart
+      ? `<div class="chart-container"><canvas id="chart-weekly"></canvas></div>` : '';
 
-      const colMap = []; // { type, loadStatus, isTotal }
+    $('#pivotTabContent').append(`<div class="tab-pane fade${idx===0?' show active':''}" id="${tabId}" role="tabpanel">
+      <div class="card mt-2">
+        <div class="card-header"><span>Field Layout: </span><span class="tab-legend">${cfg.legend}</span></div>
+        <div class="card-body p-2">${chartDiv}<div id="pt-${cfg.id}"></div></div>
+      </div>
+    </div>`);
+  });
 
-      // Row 0 = TYPE; row 1 = Load Status
-      const row0Cells = $(headerRows[0]).find('th');
-      const row1Cells = $(headerRows[1]).find('th');
-      let colIdx = 0;
-      row0Cells.each(function() {
-        const cls = this.className || '';
-        if (cls.includes('pvtColLabel') || cls.includes('pvtVal')) {
-          const type = $(this).text().trim();
-          const span = parseInt($(this).attr('colspan') || '1');
-          for (let s = 0; s < span; s++) {
-            const ls = (row1Cells.get(colIdx)) ? $(row1Cells.get(colIdx)).text().trim() : '';
-            colMap.push({ type, loadStatus: ls, isTotal: false });
-            colIdx++;
-          }
-        } else if (cls.includes('pvtTotalLabel') || $(this).text().indexOf('Total') >= 0) {
-          colMap.push({ type: '__TOTAL__', loadStatus: '', isTotal: true });
-        }
-      });
+  // Init Bootstrap tabs
+  document.querySelectorAll('[data-bs-toggle="tab"]').forEach(t => new bootstrap.Tab(t));
 
-      if (!colMap.length) {
-        console.warn('colMap empty. headerRows[0] html:', $(headerRows[0]).html());
-        return;
-      }
-
-      // 2. Find Port groups: rows whose first <th class="pvtRowLabel"> text changes
-      const bodyRows = table.find('tbody tr');
-      if (!bodyRows.length) { console.warn('No body rows'); return; }
-
-      const groups = [];
-      let curPort = null, endIdx = 0;
-
-      bodyRows.each(function(idx) {
-        const firstTh = $(this).find('th.pvtRowLabel').first();
-        const text = firstTh.text().trim();
-        if (text && text !== curPort && text !== '〔Port Total〕') {
-          if (curPort !== null) groups.push({ port: curPort, endIdx: idx - 1 });
-          curPort = text;
-          endIdx = idx;
-        }
-      });
-      if (curPort !== null) groups.push({ port: curPort, endIdx: bodyRows.length - 1 });
-
-      if (!groups.length) { console.warn('No port groups found'); return; }
-
-      // 3. Count label <th>s per row (Lane etc.)
-      const numLabelThs = bodyRows.first().find('th').length;
-
-      // 4. Insert subtotal rows in reverse to preserve indices
-      groups.slice().reverse().forEach(g => {
-        const pt = portTotals[g.port];
-        if (!pt) return;
-        const afterRow = $(bodyRows[g.endIdx]);
-        let html = '<tr class="port-total-row">';
-        html += '<th class="pvtRowLabel" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</th>';
-        for (let i = 1; i < numLabelThs; i++) {
-          html += '<th style="background:#d0e4ff;padding:4px 8px;"></th>';
-        }
-        colMap.forEach(col => {
-          let val = 0;
-          if (col.isTotal) {
-            val = pt['__total__'] || 0;
-          } else {
-            val = pt[col.type + '|||' + col.loadStatus] || 0;
-          }
-          const formatted = val ? val.toLocaleString() : '–';
-          html += `<td style="text-align:right;background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">${formatted}</td>`;
-        });
-        html += '</tr>';
-        afterRow.after(html);
-      });
-
-      console.log('Port Total rows injected:', groups.length);
-    }
-
-    // Defer slightly to let Bootstrap tab + pivot render settle
-    setTimeout(doInject, 120);
-  }
-
-
-  function applyFilter(dataSrc, filter) {
-    return dataSrc.filter(row => {
-      for (const [k, v] of Object.entries(filter || {})) {
-        const rv = String(row[k] ?? '');
-        if (Array.isArray(v)) { if (!v.includes(rv)) return false; }
-        else { if (rv !== v) return false; }
-      }
-      return true;
-    });
-  }
-
-  // Compute row order: sort by first row field by sum of first val descending
-  function getRowOrder(filtered, rowField, valField) {
-    const sums = {};
-    filtered.forEach(r => {
-      const k = String(r[rowField] || '');
-      if (!k) return;
-      sums[k] = (sums[k] || 0) + (r[valField] || 0);
-    });
-    return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
-  }
-
-  // Month sort: "2026-01" → numeric
-  function monthKey(s) {
-    const parts = String(s).split('-');
-    return parts.length === 2 ? parseInt(parts[0]) * 100 + parseInt(parts[1]) : 0;
-  }
-
-  // Week sort: "W10" → 10
-  function weekNum(s) {
-    return parseInt(String(s).replace(/[^0-9]/g, '')) || 0;
-  }
-
-  function renderPivot(cfg) {
-    const src = cfg.computed ? computedMap[cfg.id] : rawData;
-    const filtered = applyFilter(src, cfg.filter);
-
-    // Pre-compute Port totals for DOM injection (Port x Lane x Type only)
-    const portTotals = cfg.subtotalRows ? computePortTotals(filtered) : null;
-
-    const target = document.getElementById('pivot-' + cfg.id);
-    target.innerHTML = '';
-
-    const valKey = cfg.vals[0];
-
-    // Build sorters map
-    const sorters = {};
-    if (cfg.rows.includes('Week')) {
-      sorters['Week'] = function(a, b) { return weekNum(a) - weekNum(b); };
-    }
-    if (cfg.cols.includes('ATD Month')) {
-      sorters['ATD Month'] = function(a, b) { return monthKey(a) - monthKey(b); };
-    }
-    if (cfg.sortDesc && cfg.rows.length > 0) {
-      const sums = {};
-      filtered.forEach(r => {
-        const k = String(r[cfg.rows[0]] || '');
-        if (!k) return;
-        sums[k] = (sums[k] || 0) + (Number(r[valKey]) || 0);
-      });
-      const order = Object.entries(sums).sort((a, b) => b[1] - a[1]).map(e => e[0]);
-      sorters[cfg.rows[0]] = function(a, b) { return order.indexOf(a) - order.indexOf(b); };
-    }
-
-    const opts = {
-      rows: cfg.rows,
-      cols: cfg.cols,
-      vals: cfg.vals,
-      aggregatorName: 'Integer Sum',
-      rendererName: 'Table',
-      sorters: Object.keys(sorters).length > 0 ? sorters : undefined,
-      onRefresh: function(pivotUI) {
-        pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
-        if (portTotals) {
-          pivotUI.find('tr.port-total-row').remove();
-          const table = pivotUI.find('table.pvtTable').first();
-          injectPortTotalRows(table, portTotals);
-        }
-      }
-    };
-
+  // ── Render all tabs ─────────────────────────────────────────────────────────
+  tabs.forEach(cfg => {
+    const el = document.getElementById('pt-' + cfg.id);
+    if (!el) return;
     try {
-      $(target).pivotUI(filtered, opts, true);
+      if (cfg.id === 'weekly-trend') {
+        el.innerHTML = renderWeekly(cfg, rawData);
+      } else if (cfg.id === 'booking') {
+        el.innerHTML = renderBooking(cfg, rawData);
+      } else if (cfg.id === 'outbound' || cfg.id === 'inbound') {
+        el.innerHTML = renderOBIB(cfg);
+      } else {
+        el.innerHTML = renderTable(cfg, rawData);
+      }
+      // Draw chart after Weekly Trend tab renders
+      if (cfg.chart) drawWeeklyChart(rawData);
     } catch(e) {
-      target.innerHTML = '<div style="color:red;padding:20px">Pivot error: ' + e.message + '<br><pre>' + e.stack + '</pre></div>';
+      el.innerHTML = `<div style="color:red;padding:20px">Render error: ${e.message}<pre>${e.stack}</pre></div>`;
     }
-
-    if (cfg.chart) drawWeeklyChart(filtered);
-  }
-
-  // ── Init: render all tabs immediately ─────────────────────────────────────
-  tabs.forEach(cfg => renderPivot(cfg));
+  });
 
 })();
 </script>
