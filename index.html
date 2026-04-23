@@ -1,563 +1,352 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.webdatarocks.com/reports/css/webdatarocks.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
-  <script src="https://cdn.webdatarocks.com/latest/webdatarocks.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-theme-balham.css">
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31/dist/ag-grid-community.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    body { background: #f5f7fa; font-family: Arial, sans-serif; }
-    .dash-header { background: #1a2b4a; color: #fff; padding: 14px 24px; font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
-    .dash-header span { color: #8aa9d8; font-size: 13px; font-weight: 400; margin-left: 10px; }
-    .nav-tabs > li > a { color: #555; font-size: 13px; padding: 8px 16px; }
-    .nav-tabs > li.active > a { color: #1a2b4a; font-weight: 700; }
-    .tab-content { background: #fff; padding: 16px; border-radius: 0 0 4px 4px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    .tab-legend { font-size: 12px; color: #888; margin-bottom: 10px; padding: 6px 10px; background: #f9f9f9; border-radius: 4px; border: 1px solid #eee; }
-    .wdr-container { width: 100%; height: 580px; }
-    .wdr-legend { margin-top: 6px; font-size: 11px; color: #aaa; text-align: right; }
-    #chart-wrap { background: #fff; padding: 12px; border-radius: 4px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    #chart-canvas { max-height: 220px; }
-    .chart-legend { font-size: 11px; color: #888; margin-top: 6px; text-align: center; }
+    body { font-family: Arial, sans-serif; background: #f5f7fa; margin: 0; padding: 0; }
+    .nav-tabs { margin-bottom: 0; background: #fff; padding: 0 20px; border-bottom: 2px solid #ddd; }
+    .nav-tabs > li > a { color: #555; font-weight: 600; border-radius: 0; padding: 12px 20px; }
+    .nav-tabs > li.active > a { border-top: 3px solid #2c5aa0; color: #2c5aa0; }
+    .tab-content { background: #fff; min-height: 600px; }
+    .tab-pane { padding: 15px; }
+    .legend { background: #eef3fb; border: 1px solid #c5d5ea; border-radius: 4px; padding: 8px 14px; font-size: 12px; color: #2c5aa0; margin-bottom: 10px; }
+    #chart-container { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin-bottom: 15px; height: 260px; }
+    .ag-theme-balham .ag-row.row-port-total { background: #dce8fe !important; font-weight: 700; }
+    .ag-theme-balham .ag-row.row-port-total .ag-cell { color: #1a3a8f; }
+    .subtitle { font-size: 11px; color: #888; margin-top: 3px; }
+    .tab-count { background: #2c5aa0; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
+    #chart-weekly-canvas { max-height: 180px; }
   </style>
 </head>
 <body>
 
-<div class="dash-header">
-  Terminal Throughput Dashboard
-  <span>ATD Year: 2026 | Source: FineBI Export</span>
-</div>
+<div class="container-fluid" style="padding:0">
+  <div style="background:#2c5aa0; color:#fff; padding:14px 24px; font-size:18px; font-weight:700;">
+    Terminal Throughput Dashboard
+    <span style="font-size:12px; font-weight:400; opacity:0.8; margin-left:12px;">— 2026 —</span>
+  </div>
 
-<div class="container-fluid" style="margin-top:16px;">
-  <ul class="nav nav-tabs" id="dashTabs" role="tablist">
-    <li class="active"><a href="#tab-port-month" role="tab" data-toggle="tab">Port × Month</a></li>
-    <li><a href="#tab-lane-month" role="tab" data-toggle="tab">Lane × Month</a></li>
-    <li><a href="#tab-port-lane-type" role="tab" data-toggle="tab">Port × Lane × Type</a></li>
-    <li><a href="#tab-weekly-trend" role="tab" data-toggle="tab">Weekly Trend</a></li>
-    <li><a href="#tab-booking" role="tab" data-toggle="tab">Booking vs Actual</a></li>
-    <li><a href="#tab-outbound" role="tab" data-toggle="tab">Outbound Report</a></li>
-    <li><a href="#tab-inbound" role="tab" data-toggle="tab">Inbound Report</a></li>
-  </ul>
+  <ul class="nav nav-tabs" id="mainTabs" role="tablist"></ul>
 
-  <div class="tab-content">
-    <!-- Port × Month -->
-    <div class="tab-pane active" id="tab-port-month">
-      <div class="tab-legend">Row: <b>Port</b> | Column: <b>ATD Month</b> | Filter: ATD_Year=2026 | Value: Actual TEU</div>
-      <div id="wdr-port-month"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
+  <div class="tab-content" id="mainTabContent">
+    <div role="tabpanel" class="tab-pane" id="tab-port-month"><div class="legend"></div><div id="grid-port-month" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
+    <div role="tabpanel" class="tab-pane" id="tab-lane-month"><div class="legend"></div><div id="grid-lane-month" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
+    <div role="tabpanel" class="tab-pane" id="tab-port-lane-type"><div class="legend"></div><div id="grid-port-lane-type" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
+    <div role="tabpanel" class="tab-pane" id="tab-weekly-trend">
+      <div class="legend"></div>
+      <div id="chart-container"><canvas id="chart-weekly-canvas"></canvas></div>
+      <div id="grid-weekly-trend" class="ag-theme-balham" style="height:400px;width:100%"></div>
     </div>
-
-    <!-- Lane × Month -->
-    <div class="tab-pane" id="tab-lane-month">
-      <div class="tab-legend">Row: <b>Lane</b> | Column: <b>ATD Month</b> | Filter: ATD_Year=2026 | Value: Actual TEU</div>
-      <div id="wdr-lane-month"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
-
-    <!-- Port × Lane × Type -->
-    <div class="tab-pane" id="tab-port-lane-type">
-      <div class="tab-legend">Row: <b>Port + Lane</b> | Column: <b>TYPE + Load Status</b> | Filter: ATD_Year=2026 | Value: Actual TEU</div>
-      <div id="wdr-port-lane-type"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
-
-    <!-- Weekly Trend -->
-    <div class="tab-pane" id="tab-weekly-trend">
-      <div id="chart-wrap">
-        <canvas id="chart-canvas"></canvas>
-        <div class="chart-legend">Weekly Actual TEU Trend — ATD Year 2026</div>
-      </div>
-      <div class="tab-legend">Row: <b>Week</b> | Filter: ATD_Year=2026 | Value: Actual TEU</div>
-      <div id="wdr-weekly-trend"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
-
-    <!-- Booking vs Actual -->
-    <div class="tab-pane" id="tab-booking">
-      <div class="tab-legend">Row: <b>Port</b> | Filter: ATD_Year=2026 | Value: Booking TEU + Actual TEU + Fulfill Rate</div>
-      <div id="wdr-booking"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
-
-    <!-- Outbound Report -->
-    <div class="tab-pane" id="tab-outbound">
-      <div class="tab-legend">Row: <b>Port</b> | Column: <b>ATD_Year + ATD Month</b> | Filter: TYPE in [OUT, T/S OUT] + ATD_Year | Value: Actual TEU + VS. Last Year + VS. Last Month</div>
-      <div id="wdr-outbound"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
-
-    <!-- Inbound Report -->
-    <div class="tab-pane" id="tab-inbound">
-      <div class="tab-legend">Row: <b>Port</b> | Column: <b>ATD_Year + ATD Month</b> | Filter: TYPE in [IN, T/S IN] + ATD_Year | Value: Actual TEU + VS. Last Year + VS. Last Month</div>
-      <div id="wdr-inbound"></div>
-      <div class="wdr-legend">Drag fields to reorganize • Click field header to sort</div>
-    </div>
+    <div role="tabpanel" class="tab-pane" id="tab-booking-actual"><div class="legend"></div><div id="grid-booking-actual" class="ag-theme-balham" style="height:500px;width:100%"></div></div>
+    <div role="tabpanel" class="tab-pane" id="tab-outbound"><div class="legend"></div><div id="grid-outbound" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
+    <div role="tabpanel" class="tab-pane" id="tab-inbound"><div class="legend"></div><div id="grid-inbound" class="ag-theme-balham" style="height:600px;width:100%"></div></div>
   </div>
 </div>
 
 <script>
-(function() {
-  // ── 1. Raw data (same source) ──────────────────────────────────────────────
-  var rawData = [
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":28,"Booking TEU":29,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":46,"Booking TEU":46,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":28,"Booking TEU":28,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":46,"Booking TEU":46,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":29,"Booking TEU":29,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":46,"Booking TEU":46,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"CV-CS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"HVS-DRH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-YTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CP","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-TJG","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-KCH","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":16,"Booking TEU":16,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEJEA","Lane":"AEJEA-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-KK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-CPN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":24,"Booking TEU":24,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":38,"Booking TEU":38,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-MK","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-SCS","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":20,"Booking TEU":20,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":32,"Booking TEU":32,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEKLF","Lane":"AEKLF-BTN","TYPE":"T/S OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-AEWWR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-DBY","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":2,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":14,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-HVU","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":4,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":26,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":4,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":26,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":4,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"OUT","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":26,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W12","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W12-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W13","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W13-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Empty","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"},
-    {"Port":"AEWWR","Lane":"AEWWR-KR","TYPE":"IN","Load Status":"Laden","ATD Month":"2026-03","ATD_Year":"2026","Week":"W14","Actual TEU":0,"Booking TEU":0,"COC-SOC":"COC","ATD Week-Year":"W14-2026"}
-  ];
+// ─── DATA ────────────────────────────────────────────────────────────────────
+let rawData = [];
 
-  // ── 2. Enrich data: Fulfill Rate, YoY, MoM ────────────────────────────────
-  rawData.forEach(function(r) {
-    r['Fulfill Rate'] = (r['Booking TEU'] > 0) ? r['Actual TEU'] / r['Booking TEU'] : 0;
+fetch('https://Leylalyu-cul.github.io/terminal-throughput-dashboard/data/pivot_data.json')
+  .then(r => r.json())
+  .then(data => {
+    rawData = data;
+    initDashboard();
+  })
+  .catch(() => {
+    document.body.innerHTML += '<div style="padding:20px;color:red;font-size:16px">Failed to load data. Please refresh.</div>';
   });
 
-  function buildYoYMoM(base) {
-    var agg = {};
-    base.forEach(function(r) {
-      var k = r.Port + '|' + r['ATD_Year'] + '|' + r['ATD Month'];
-      if (!agg[k]) agg[k] = { Port: r.Port, ATD_Year: r['ATD_Year'], 'ATD Month': r['ATD Month'], 'Actual TEU': 0 };
-      agg[k]['Actual TEU'] += (r['Actual TEU'] || 0);
-    });
-    var prevY = function(yr) { var y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
-    var prevM = function(mo) {
-      if (!mo) return '';
-      var ps = mo.split('-').map(Number);
-      if (ps.length < 2 || isNaN(ps[0]) || isNaN(ps[1])) return '';
-      var d = new Date(ps[0], ps[1] - 2, 1);
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    };
-    var gv = function(port, yr, mo) {
-      var k = port + '|' + yr + '|' + mo;
-      return agg[k] ? agg[k]['Actual TEU'] : 0;
-    };
-    var result = [];
-    Object.keys(agg).forEach(function(k) {
-      var r = { Port: agg[k].Port, ATD_Year: agg[k]['ATD_Year'], 'ATD Month': agg[k]['ATD Month'], 'Actual TEU': agg[k]['Actual TEU'] };
-      r['VS. Last Year']  = r['Actual TEU'] - gv(r.Port, prevY(r.ATD_Year), r['ATD Month']);
-      r['VS. Last Month'] = r['Actual TEU'] - gv(r.Port, r.ATD_Year, prevM(r['ATD Month']));
-      result.push(r);
-    });
-    return result;
-  }
+function initDashboard() {
 
-  var dataOB = buildYoYMoM(rawData.filter(function(r) { return r.TYPE === 'OUT' || r.TYPE === 'T/S OUT'; }));
-  var dataIB = buildYoYMoM(rawData.filter(function(r) { return r.TYPE === 'IN'  || r.TYPE === 'T/S IN';  }));
+// Pre-compute YoY / MoM helpers
+const prevYear  = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
+const prevMonth = mo => {
+  if (!mo) return '';
+  const [y, m] = mo.split('-').map(Number);
+  if (isNaN(y) || isNaN(m)) return '';
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
 
-  // ── 3. Build WebDataRocks instances ────────────────────────────────────────
-  var instances = {};
+function aggTEU(data, groupBy) {
+  const map = {};
+  data.forEach(r => {
+    const k = groupBy.map(f => (r[f] ?? '')).join('|');
+    if (!map[k]) { map[k] = { ...r }; map[k]['Actual TEU'] = 0; map[k]['Booking TEU'] = 0; }
+    map[k]['Actual TEU']  += (r['Actual TEU']  || 0);
+    map[k]['Booking TEU'] += (r['Booking TEU'] || 0);
+  });
+  return Object.values(map);
+}
 
-  function baseOptions(containerId) {
-    return {
-      container: '#' + containerId,
-      width: '100%',
-      height: 580,
-      toolbar: true,
-      logoUrl: '',
-      licenseKey: ''
-    };
-  }
+function buildYoYMoM(baseData, groupFields, extraFields = []) {
+  const aggMap = {};
+  baseData.forEach(r => {
+    const gf = groupFields.map(f => (r[f] ?? '')).join('|');
+    if (!aggMap[gf]) { aggMap[gf] = { ...r, 'Actual TEU': 0 }; }
+    aggMap[gf]['Actual TEU'] += (r['Actual TEU'] || 0);
+    extraFields.forEach(f => { aggMap[gf][f] = r[f]; });
+  });
 
-  // All fields definition
-  var allFields = [
-    { name: 'Port',         caption: 'Port' },
-    { name: 'Lane',         caption: 'Lane' },
-    { name: 'TYPE',         caption: 'TYPE' },
-    { name: 'Load Status',  caption: 'Load Status' },
-    { name: 'ATD Month',    caption: 'ATD Month' },
-    { name: 'ATD_Year',     caption: 'ATD Year' },
-    { name: 'Week',         caption: 'Week' },
-    { name: 'COC-SOC',      caption: 'COC/SOC' },
-    { name: 'Actual TEU',   caption: 'Actual TEU',  aggregation: 'Sum' },
-    { name: 'Booking TEU',  caption: 'Booking TEU', aggregation: 'Sum' },
-    { name: 'Fulfill Rate', caption: 'Fulfill Rate', aggregation: 'Average' }
-  ];
+  const valMap = {};
+  Object.values(aggMap).forEach(r => {
+    const vk = groupFields.map(f => (r[f] ?? '')).join('|');
+    valMap[vk] = r['Actual TEU'];
+  });
 
-  // ① Port × Month
-  instances['port-month'] = new WebDataRocks($.extend(baseOptions('wdr-port-month'), {
-    dataSource: { data: rawData },
-    fields: { fields: allFields },
-    slice: {
-      rows: [{ uniqueName: 'Port' }],
-      columns: [{ uniqueName: 'ATD Month' }],
-      measures: [{ uniqueName: 'Actual TEU', aggregation: 'Sum' }],
-      filters: [{ uniqueName: 'ATD_Year', filter: { members: ['atd_year.2026'] } }]
+  return Object.values(aggMap).map(r => {
+    const vk = groupFields.map(f => (r[f] ?? '')).join('|');
+    const lyk = [prevYear(r.ATD_Year), r['ATD Month']].join('|');
+    const lmk = [r.ATD_Year, prevMonth(r['ATD Month'])].join('|');
+    r['VS. Last Year']  = r['Actual TEU'] - (valMap[lyk] || 0);
+    r['VS. Last Month'] = r['Actual TEU'] - (valMap[lmk] || 0);
+    return r;
+  });
+}
+
+const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
+const dataWeek  = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
+const dataOB    = buildYoYMoM(rawData.filter(r => ['OUT','T/S OUT'].includes(r.TYPE)), ['Port','ATD_Year','ATD Month']);
+const dataIB    = buildYoYMoM(rawData.filter(r => ['IN','T/S IN'].includes(r.TYPE)),  ['Port','ATD_Year','ATD Month']);
+
+// AG Grid License (Community = no key needed)
+</script>
+<script>
+// ─── CHART ────────────────────────────────────────────────────────────────────
+let weeklyChart = null;
+function drawWeeklyChart(data) {
+  const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
+  if (weeklyChart) weeklyChart.destroy();
+  // Sort by week number
+  const sorted = [...data].sort((a, b) => {
+    const wa = parseInt(String(a.Week || '').replace(/\D/g, '')) || 0;
+    const wb = parseInt(String(b.Week || '').replace(/\D/g, '')) || 0;
+    return wa - wb;
+  });
+  weeklyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: sorted.map(r => r.Week),
+      datasets: [{
+        label: 'Actual TEU',
+        data: sorted.map(r => r['Actual TEU'] || 0),
+        borderColor: '#2c5aa0',
+        backgroundColor: 'rgba(44,90,160,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
     },
-    formats: [{ name: 'teu', thousandsSeparator: ',' }]
-  }));
-
-  // ② Lane × Month
-  instances['lane-month'] = new WebDataRocks($.extend(baseOptions('wdr-lane-month'), {
-    dataSource: { data: rawData },
-    fields: { fields: allFields },
-    slice: {
-      rows: [{ uniqueName: 'Lane' }],
-      columns: [{ uniqueName: 'ATD Month' }],
-      measures: [{ uniqueName: 'Actual TEU', aggregation: 'Sum' }],
-      filters: [{ uniqueName: 'ATD_Year', filter: { members: ['atd_year.2026'] } }]
-    }
-  }));
-
-  // ③ Port × Lane × Type
-  instances['port-lane-type'] = new WebDataRocks($.extend(baseOptions('wdr-port-lane-type'), {
-    dataSource: { data: rawData },
-    fields: { fields: allFields },
-    slice: {
-      rows: [{ uniqueName: 'Port' }, { uniqueName: 'Lane' }],
-      columns: [{ uniqueName: 'TYPE' }, { uniqueName: 'Load Status' }],
-      measures: [{ uniqueName: 'Actual TEU', aggregation: 'Sum' }],
-      filters: [{ uniqueName: 'ATD_Year', filter: { members: ['atd_year.2026'] } }]
-    }
-  }));
-
-  // ④ Weekly Trend — also build chart data
-  (function() {
-    var weeks = {};
-    rawData.filter(function(r) { return r['ATD_Year'] === '2026'; }).forEach(function(r) {
-      if (!weeks[r.Week]) weeks[r.Week] = 0;
-      weeks[r.Week] += r['Actual TEU'] || 0;
-    });
-    var sorted = Object.keys(weeks).sort();
-    var labels = sorted.map(function(w) { return w; });
-    var values = sorted.map(function(w) { return weeks[w]; });
-
-    // Lazy-load Chart.js via script tag, then draw
-    function drawChart() {
-      if (typeof Chart === 'undefined') {
-        var s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-        s.onload = renderChart;
-        document.head.appendChild(s);
-      } else {
-        renderChart();
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top' },
+        title: { display: true, text: 'Weekly Trend — Actual TEU (2026)', font: { size: 14 } }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
+        x: { title: { display: true, text: 'Week' } }
       }
     }
-    function renderChart() {
-      var ctx = document.getElementById('chart-canvas').getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Actual TEU',
-            data: values,
-            borderColor: '#1a2b4a',
-            backgroundColor: 'rgba(26,43,74,0.08)',
-            fill: true,
-            tension: 0.3,
-            pointRadius: 4,
-            pointBackgroundColor: '#1a2b4a'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
-            x: { title: { display: true, text: 'Week' } }
-          }
-        }
-      });
-    }
-    drawChart();
-  }());
+  });
+}
 
-  instances['weekly-trend'] = new WebDataRocks($.extend(baseOptions('wdr-weekly-trend'), {
-    dataSource: { data: rawData },
-    fields: { fields: allFields },
-    slice: {
-      rows: [{ uniqueName: 'Week' }],
-      measures: [{ uniqueName: 'Actual TEU', aggregation: 'Sum' }],
-      filters: [{ uniqueName: 'ATD_Year', filter: { members: ['atd_year.2026'] } }]
-    }
-  }));
+// ─── AG GRID ──────────────────────────────────────────────────────────────────
+function makeGridOpts(containerId, rowData, colDefs, defaultColDef) {
+  const opts = {
+    columnDefs: colDefs,
+    rowData: rowData,
+    defaultColDef: Object.assign({
+      sortable: true,
+      resizable: true,
+      filter: true,
+      minWidth: 80
+    }, defaultColDef || {}),
+    animateRows: true,
+    suppressMovable: false,
+    onGridReady: params => params.api.sizeColumnsToFit()
+  };
+  return opts;
+}
 
-  // ⑤ Booking vs Actual
-  instances['booking'] = new WebDataRocks($.extend(baseOptions('wdr-booking'), {
-    dataSource: { data: rawData },
-    fields: { fields: allFields },
-    slice: {
-      rows: [{ uniqueName: 'Port' }],
-      measures: [
-        { uniqueName: 'Booking TEU',  aggregation: 'Sum' },
-        { uniqueName: 'Actual TEU',   aggregation: 'Sum' },
-        { uniqueName: 'Fulfill Rate', aggregation: 'Average', format: 'percent' }
-      ],
-      filters: [{ uniqueName: 'ATD_Year', filter: { members: ['atd_year.2026'] } }]
-    }
-  }));
+// Helper: integer formatter
+const fmtInt = v => (v == null) ? '' : v.toLocaleString('en-US');
 
-  // ⑥ Outbound Report
-  instances['outbound'] = new WebDataRocks($.extend(baseOptions('wdr-outbound'), {
-    dataSource: { data: dataOB },
-    fields: { fields: [
-      { name: 'Port',         caption: 'Port' },
-      { name: 'ATD_Year',     caption: 'ATD Year' },
-      { name: 'ATD Month',    caption: 'ATD Month' },
-      { name: 'Actual TEU',   caption: 'Actual TEU',  aggregation: 'Sum' },
-      { name: 'VS. Last Year', caption: 'VS. Last Year', aggregation: 'Sum' },
-      { name: 'VS. Last Month', caption: 'VS. Last Month', aggregation: 'Sum' }
-    ]},
-    slice: {
-      rows: [{ uniqueName: 'Port' }],
-      columns: [{ uniqueName: 'ATD_Year' }, { uniqueName: 'ATD Month' }],
-      measures: [
-        { uniqueName: 'Actual TEU',    aggregation: 'Sum' },
-        { uniqueName: 'VS. Last Year',  aggregation: 'Sum' },
-        { uniqueName: 'VS. Last Month', aggregation: 'Sum' }
-      ]
-    }
-  }));
+// Helper: percent formatter
+const fmtPct = v => (v == null) ? '' : (v * 100).toFixed(1) + '%';
 
-  // ⑦ Inbound Report
-  instances['inbound'] = new WebDataRocks($.extend(baseOptions('wdr-inbound'), {
-    dataSource: { data: dataIB },
-    fields: { fields: [
-      { name: 'Port',         caption: 'Port' },
-      { name: 'ATD_Year',     caption: 'ATD Year' },
-      { name: 'ATD Month',    caption: 'ATD Month' },
-      { name: 'Actual TEU',   caption: 'Actual TEU',  aggregation: 'Sum' },
-      { name: 'VS. Last Year', caption: 'VS. Last Year', aggregation: 'Sum' },
-      { name: 'VS. Last Month', caption: 'VS. Last Month', aggregation: 'Sum' }
-    ]},
-    slice: {
-      rows: [{ uniqueName: 'Port' }],
-      columns: [{ uniqueName: 'ATD_Year' }, { uniqueName: 'ATD Month' }],
-      measures: [
-        { uniqueName: 'Actual TEU',    aggregation: 'Sum' },
-        { uniqueName: 'VS. Last Year',  aggregation: 'Sum' },
-        { uniqueName: 'VS. Last Month', aggregation: 'Sum' }
-      ]
-    }
-  }));
+// Helper: render row with custom data
+function makeColDef(field, header, agg = 'sum', enablePivot = false) {
+  return {
+    field,
+    headerName: header,
+    enablePivot,
+    aggFunc: agg === 'sum' ? 'sum' : (agg === 'avg' ? 'avg' : null),
+    valueFormatter: params => {
+      if (field === 'Fulfill Rate') return fmtPct(params.value);
+      if (typeof params.value === 'number') return fmtInt(params.value);
+      return params.value;
+    },
+    type: typeof field === 'string' && (field.includes('TEU') || field === 'Fulfill Rate') ? 'numericColumn' : null
+  };
+}
 
-})();
+// ─── Tab 1: Port x Month ──────────────────────────────────────────────────────
+const portMonthData = aggTEU(dataY2026, ['Port','ATD Month']);
+const portMonthCols = [
+  makeColDef('Port', 'Port', 'sum'),
+  makeColDef('ATD Month', 'ATD Month', 'sum'),
+  makeColDef('Actual TEU', 'Actual TEU', 'sum')
+];
+
+// ─── Tab 2: Lane x Month ──────────────────────────────────────────────────────
+const laneMonthData = aggTEU(dataY2026, ['Lane','ATD Month']);
+const laneMonthCols = [
+  makeColDef('Lane', 'Lane', 'sum'),
+  makeColDef('ATD Month', 'ATD Month', 'sum'),
+  makeColDef('Actual TEU', 'Actual TEU', 'sum')
+];
+
+// ─── Tab 3: Port x Lane x Type ───────────────────────────────────────────────
+// Use AG Grid row grouping via autoGroupColumnDef
+const pltData = aggTEU(dataY2026, ['Port','Lane','TYPE','Load Status']);
+const pltCols = [
+  { field: 'Port',        headerName: 'Port',        rowGroup: true, hide: true },
+  { field: 'Lane',        headerName: 'Lane',        rowGroup: true, hide: true },
+  { field: 'TYPE',        headerName: 'TYPE',        enableRowGroup: true },
+  { field: 'Load Status', headerName: 'Load Status', enableRowGroup: true },
+  makeColDef('Actual TEU', 'Actual TEU', 'sum')
+];
+
+// ─── Tab 4: Weekly Trend ──────────────────────────────────────────────────────
+const weekMap = {};
+dataWeek.forEach(r => {
+  const w = r.Week;
+  if (!weekMap[w]) weekMap[w] = { Week: w, 'Actual TEU': 0 };
+  weekMap[w]['Actual TEU'] += (r['Actual TEU'] || 0);
+});
+const weekData = Object.values(weekMap).sort((a, b) => {
+  const wa = parseInt(String(a.Week||'').replace(/\D/g,''))||0;
+  const wb = parseInt(String(b.Week||'').replace(/\D/g,''))||0;
+  return wa - wb;
+});
+const weekCols = [
+  makeColDef('Week', 'Week', 'sum'),
+  makeColDef('Actual TEU', 'Actual TEU', 'sum')
+];
+
+// ─── Tab 5: Booking vs Actual ─────────────────────────────────────────────────
+const bkaData = aggTEU(dataY2026, ['Port']);
+bkaData.forEach(r => {
+  r['Fulfill Rate'] = r['Booking TEU'] > 0 ? r['Actual TEU'] / r['Booking TEU'] : 0;
+  r['Gap'] = r['Actual TEU'] - r['Booking TEU'];
+});
+const bkaCols = [
+  makeColDef('Port', 'Port', 'sum'),
+  makeColDef('Booking TEU', 'Booking TEU', 'sum'),
+  makeColDef('Actual TEU', 'Actual TEU', 'sum'),
+  {
+    field: 'Gap',
+    headerName: 'Gap (Actual-Booking)',
+    type: 'numericColumn',
+    valueFormatter: p => fmtInt(p.value)
+  },
+  {
+    field: 'Fulfill Rate',
+    headerName: 'Fulfill Rate',
+    type: 'numericColumn',
+    valueFormatter: p => fmtPct(p.value)
+  }
+];
+
+// ─── Tab 6 & 7: OB / IB ───────────────────────────────────────────────────────
+const obibCols = (title) => [
+  makeColDef('Port', 'Port', 'sum'),
+  makeColDef('ATD_Year', 'Year', 'sum'),
+  makeColDef('ATD Month', 'Month', 'sum'),
+  makeColDef('Actual TEU', 'Actual TEU', 'sum'),
+  makeColDef('VS. Last Year', 'VS. Last Year', 'sum'),
+  makeColDef('VS. Last Month', 'VS. Last Month', 'sum')
+];
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+const grids = {};
+
+function initGrid(tabId, containerId, rowData, colDefs, extraOpts) {
+  const gridDiv = document.getElementById(containerId);
+  const opts = makeGridOpts(containerId, rowData, colDefs, extraOpts);
+  if (tabId === 'tab-port-lane-type') {
+    opts.autoGroupColumnDef = {
+      headerName: 'Port / Lane',
+      minWidth: 200,
+      cellRendererParams: { suppressCount: false }
+    };
+    opts.groupDefaultExpanded = 1;
+    opts.suppressAggFuncInHeader = false;
+  }
+  grids[tabId] = agGrid.createGrid(gridDiv, opts);
+}
+
+// Wait for tab switch to init charts
+$('#mainTabs').on('shown.bs.tab', function(e) {
+  const tabId = $(e.target).attr('href');
+  if (tabId === '#tab-weekly-trend' && !weeklyChart) {
+    drawWeeklyChart(weekData);
+  }
+  if (tabId === '#tab-port-lane-type' && !grids['tab-port-lane-type']) {
+    initGrid('tab-port-lane-type', 'grid-port-lane-type', pltData, pltCols);
+  }
+  // Size columns on tab shown
+  if (grids[tabId]) grids[tabId].api.sizeColumnsToFit();
+});
+
+// Build tabs
+const tabs = [
+  { id: 'tab-port-month',       title: 'Port × Month',       legend: 'Row: Port | Col: ATD Month | Val: Actual TEU | Filter: ATD_Year=2026' },
+  { id: 'tab-lane-month',       title: 'Lane × Month',       legend: 'Row: Lane | Col: ATD Month | Val: Actual TEU | Filter: ATD_Year=2026' },
+  { id: 'tab-port-lane-type',   title: 'Port × Lane × Type', legend: 'Row: Port + Lane (grouped) | Col: TYPE + Load Status | Val: Actual TEU | Filter: ATD_Year=2026' },
+  { id: 'tab-weekly-trend',     title: 'Weekly Trend',        legend: 'Row: Week | Val: Actual TEU | Chart: Line | Filter: ATD_Year=2026' },
+  { id: 'tab-booking-actual',   title: 'Booking vs Actual',   legend: 'Row: Port | Val: Booking TEU + Actual TEU + Gap + Fulfill Rate | Filter: ATD_Year=2026' },
+  { id: 'tab-outbound',         title: 'Outbound Report',     legend: 'Row: Port | Col: Year + Month | Val: Actual TEU + VS LY + VS LM' },
+  { id: 'tab-inbound',          title: 'Inbound Report',      legend: 'Row: Port | Col: Year + Month | Val: Actual TEU + VS LY + VS LM' }
+];
+
+tabs.forEach((t, i) => {
+  $('#mainTabs').append(`<li role="presentation"${i===0?' class="active"':''}><a href="#${t.id}" aria-controls="${t.id}" role="tab" data-toggle="tab">${t.title}</a></li>`);
+  $(`#${t.id} .legend`).text(t.legend);
+});
+
+$('#mainTabs a:first').tab('show');
+
+// Init first tab immediately
+initGrid('tab-port-month', 'grid-port-month', portMonthData, portMonthCols);
+
+// Init others lazily on tab switch
+const lazyInit = {
+  'tab-lane-month':      () => initGrid('tab-lane-month',      'grid-lane-month',      laneMonthData, laneMonthCols),
+  'tab-booking-actual':  () => initGrid('tab-booking-actual',  'grid-booking-actual',  bkaData, bkaCols),
+  'tab-outbound':        () => initGrid('tab-outbound',        'grid-outbound',        dataOB, obibCols()),
+  'tab-inbound':         () => initGrid('tab-inbound',         'grid-inbound',         dataIB, obibCols())
+};
+
+$('#mainTabs').on('shown.bs.tab', function(e) {
+  const tabId = $(e.target).attr('href');
+  if (lazyInit[tabId]) { lazyInit[tabId](); delete lazyInit[tabId]; }
+  if (tabId === '#tab-weekly-trend' && weekData.length) drawWeeklyChart(weekData);
+});
+  } // end initDashboard
 </script>
-
 </body>
 </html>
