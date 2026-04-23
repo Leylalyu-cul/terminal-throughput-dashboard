@@ -318,20 +318,23 @@
 
     if (!groups.length) { console.warn('No port groups found'); return; }
 
-    // 3. Insert subtotal row after each Port group (reverse order to keep indices stable)
-    const stubTds = bodyRows.first().find('td').length; // number of row-header <td>s before data
+    // 3. Count row-header <th>s in the first data row to know how many label cells precede data <td>s
+    const numRowHeaderCols = bodyRows.first().find('th').length;
+    const numDataCols = bodyRows.first().find('td').length;
+
+    // 4. Insert subtotal row after each Port group (reverse order to keep indices stable)
     groups.slice().reverse().forEach(g => {
       const pt = portTotals[g.port];
       if (!pt) return;
       const afterRow = $(bodyRows[g.endIdx]);
       let html = '<tr class="port-total-row">';
-      // Row-label cell (〔Port Total〕)
-      html += '<td class="pvtRowLabel pvtSubtotal" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</td>';
-      // One <td> per stub column (empty — Port already labelled)
-      for (let i = 1; i < stubTds; i++) {
-        html += '<td style="background:#d0e4ff;padding:4px 8px;"></td>';
+      // First <th> = Port label (〔Port Total〕) — matches the row-header column
+      html += '<th class="pvtRowLabel" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</th>';
+      // Remaining row-header <th>s (Lane etc.) — empty fillers
+      for (let i = 1; i < numRowHeaderCols; i++) {
+        html += '<th style="background:#d0e4ff;padding:4px 8px;"></th>';
       }
-      // One <td> per data column
+      // Data <td>s — one per column in the pivot
       colMap.forEach(col => {
         let val = 0;
         if (col.isTotal) {
