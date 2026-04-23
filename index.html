@@ -23,7 +23,12 @@
     .info-bar { font-size: 0.8rem; color: #888; margin-bottom: 6px; }
     .tab-legend { font-size: 0.78rem; color: #888; }
     .tab-legend strong { color: #555; }
-    .pvtTable { font-size: 12px; }
+    .pvtTable td[data-value="〔Port Total〕"],
+    .pvtTable th[data-value="〔Port Total〕"] {
+      background: #d0e4ff !important;
+      font-weight: 700 !important;
+      color: #1a3c6e !important;
+    }
     .chart-container { position: relative; height: 300px; background: #fff; border-radius: 6px; margin-bottom: 16px; padding: 12px; border: 1px solid #e0e6ed; }
     .chart-container canvas { max-height: 276px; }
     #spinner { display: none; text-align: center; padding: 40px; color: #888; }
@@ -243,7 +248,37 @@
     });
   }
 
-  // ── Render pivot ───────────────────────────────────────────────────────────
+  // ── Port subtotal injection for Port x Lane x Type ──────────────────────
+  // PivotTable.js has no native subtotal. We insert a synthetic "〔Total〕" Lane
+  // row per Port so it appears as a real row in the table.
+  function addPortSubtotals(data) {
+    // group by Port
+    const portMap = {};
+    data.forEach(r => {
+      const p = String(r['Port'] || '');
+      if (!portMap[p]) portMap[p] = [];
+      portMap[p].push(r);
+    });
+    const result = [];
+    Object.entries(portMap).forEach(([port, rows]) => {
+      // Insert subtotal row FIRST so it appears at the top of each Port group
+      const sub = {};
+      // copy all keys from first row, zero out numeric ones
+      Object.keys(rows[0]).forEach(k => { sub[k] = rows[0][k]; });
+      sub['Port'] = port;
+      sub['Lane'] = '〔Port Total〕';
+      // Sum numeric fields
+      const numKeys = ['Actual TEU', 'Booking TEU', 'Fulfill Rate'];
+      numKeys.forEach(k => {
+        sub[k] = rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+      });
+      result.push(sub);
+      rows.forEach(r => result.push(r));
+    });
+    return result;
+  }
+
+
   function applyFilter(dataSrc, filter) {
     return dataSrc.filter(row => {
       for (const [k, v] of Object.entries(filter || {})) {
@@ -279,7 +314,13 @@
 
   function renderPivot(cfg) {
     const src = cfg.computed ? computedMap[cfg.id] : rawData;
-    const filtered = applyFilter(src, cfg.filter);
+    let filtered = applyFilter(src, cfg.filter);
+
+    // For Port x Lane x Type: inject per-Port subtotal rows
+    if (cfg.subtotalRows) {
+      filtered = addPortSubtotals(filtered);
+    }
+
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
 
