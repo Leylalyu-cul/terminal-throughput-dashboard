@@ -265,89 +265,94 @@
   }
 
   // ── Inject Port Total rows after pivotUI renders ───────────────────────
-  function injectPortTotalRows(pivotUI, portTotals) {
-    const table = pivotUI.find('table.pvtTable').first();
-    if (!table.length) { console.warn('pvtTable not found'); return; }
+  // Inject Port Total rows after pivotUI renders using MutationObserver
+  function injectPortTotalRows(table, portTotals) {
+    if (!table || !table.length) { console.warn('pvtTable not found'); return; }
 
-    // 1. Discover column order from rendered <th> in the two header rows
-    const thead = table.find('thead');
-    const headerRows = thead.find('tr');
-    if (headerRows.length < 2) { console.warn('Header rows < 2:', headerRows.length); return; }
+    // 1. Wait for table to have body rows (defer if needed)
+    function doInject() {
+      const thead = table.find('thead');
+      const headerRows = thead.find('tr');
+      if (headerRows.length < 2) { console.warn('Header rows < 2:', headerRows.length); return; }
 
-    const colMap = []; // { type, loadStatus, isTotal }
-    const stubCount = table.find('tbody tr').first().find('th').length;
+      const colMap = []; // { type, loadStatus, isTotal }
 
-    // Row 0 = TYPE (or Total span); row 1 = Load Status
-    const row0Cells = $(headerRows[0]).find('th');
-    const row1Cells = $(headerRows[1]).find('th');
-
-    let colIdx = 0;
-    row0Cells.each(function() {
-      const cls = this.className || '';
-      if (cls.includes('pvtColLabel')) {
-        const type  = $(this).text().trim();
-        const span  = parseInt($(this).attr('colspan') || '1');
-        // Match Load Status from row1 for this column slot
-        for (let s = 0; s < span; s++) {
-          const ls = (row1Cells[colIdx]) ? $(row1Cells[colIdx]).text().trim() : '';
-          colMap.push({ type, loadStatus: ls, isTotal: false });
-          colIdx++;
+      // Row 0 = TYPE; row 1 = Load Status
+      const row0Cells = $(headerRows[0]).find('th');
+      const row1Cells = $(headerRows[1]).find('th');
+      let colIdx = 0;
+      row0Cells.each(function() {
+        const cls = this.className || '';
+        if (cls.includes('pvtColLabel') || cls.includes('pvtVal')) {
+          const type = $(this).text().trim();
+          const span = parseInt($(this).attr('colspan') || '1');
+          for (let s = 0; s < span; s++) {
+            const ls = (row1Cells.get(colIdx)) ? $(row1Cells.get(colIdx)).text().trim() : '';
+            colMap.push({ type, loadStatus: ls, isTotal: false });
+            colIdx++;
+          }
+        } else if (cls.includes('pvtTotalLabel') || $(this).text().indexOf('Total') >= 0) {
+          colMap.push({ type: '__TOTAL__', loadStatus: '', isTotal: true });
         }
-      } else if (cls.includes('pvtTotalLabel') || $(this).text().indexOf('Total') >= 0) {
-        colMap.push({ type: '__TOTAL__', loadStatus: '', isTotal: true });
-      }
-    });
-
-    if (!colMap.length) { console.warn('colMap empty — headers:', thead.html()); return; }
-
-    // 2. Walk body rows to find Port groups (rows where first th is a new Port)
-    const bodyRows = table.find('tbody tr');
-    const groups = [];
-    let curPort = null, startIdx = 0;
-
-    bodyRows.each(function(idx) {
-      const firstTh = $(this).find('th').first();
-      const text = firstTh.text().trim();
-      if (text !== curPort && text !== '〔Port Total〕') {
-        if (curPort !== null) groups.push({ port: curPort, endIdx: idx - 1 });
-        curPort = text;
-        startIdx = idx;
-      }
-    });
-    if (curPort !== null) groups.push({ port: curPort, endIdx: bodyRows.length - 1 });
-
-    if (!groups.length) { console.warn('No port groups found'); return; }
-
-    // 3. Count row-header <th>s in the first data row to know how many label cells precede data <td>s
-    const numRowHeaderCols = bodyRows.first().find('th').length;
-    const numDataCols = bodyRows.first().find('td').length;
-
-    // 4. Insert subtotal row after each Port group (reverse order to keep indices stable)
-    groups.slice().reverse().forEach(g => {
-      const pt = portTotals[g.port];
-      if (!pt) return;
-      const afterRow = $(bodyRows[g.endIdx]);
-      let html = '<tr class="port-total-row">';
-      // First <th> = Port label (〔Port Total〕) — matches the row-header column
-      html += '<th class="pvtRowLabel" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</th>';
-      // Remaining row-header <th>s (Lane etc.) — empty fillers
-      for (let i = 1; i < numRowHeaderCols; i++) {
-        html += '<th style="background:#d0e4ff;padding:4px 8px;"></th>';
-      }
-      // Data <td>s — one per column in the pivot
-      colMap.forEach(col => {
-        let val = 0;
-        if (col.isTotal) {
-          val = pt['__total__'] || 0;
-        } else {
-          val = pt[col.type + '|||' + col.loadStatus] || 0;
-        }
-        const formatted = val ? val.toLocaleString() : '';
-        html += `<td style="text-align:right;background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">${formatted}</td>`;
       });
-      html += '</tr>';
-      afterRow.after(html);
-    });
+
+      if (!colMap.length) {
+        console.warn('colMap empty. headerRows[0] html:', $(headerRows[0]).html());
+        return;
+      }
+
+      // 2. Find Port groups: rows whose first <th class="pvtRowLabel"> text changes
+      const bodyRows = table.find('tbody tr');
+      if (!bodyRows.length) { console.warn('No body rows'); return; }
+
+      const groups = [];
+      let curPort = null, endIdx = 0;
+
+      bodyRows.each(function(idx) {
+        const firstTh = $(this).find('th.pvtRowLabel').first();
+        const text = firstTh.text().trim();
+        if (text && text !== curPort && text !== '〔Port Total〕') {
+          if (curPort !== null) groups.push({ port: curPort, endIdx: idx - 1 });
+          curPort = text;
+          endIdx = idx;
+        }
+      });
+      if (curPort !== null) groups.push({ port: curPort, endIdx: bodyRows.length - 1 });
+
+      if (!groups.length) { console.warn('No port groups found'); return; }
+
+      // 3. Count label <th>s per row (Lane etc.)
+      const numLabelThs = bodyRows.first().find('th').length;
+
+      // 4. Insert subtotal rows in reverse to preserve indices
+      groups.slice().reverse().forEach(g => {
+        const pt = portTotals[g.port];
+        if (!pt) return;
+        const afterRow = $(bodyRows[g.endIdx]);
+        let html = '<tr class="port-total-row">';
+        html += '<th class="pvtRowLabel" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</th>';
+        for (let i = 1; i < numLabelThs; i++) {
+          html += '<th style="background:#d0e4ff;padding:4px 8px;"></th>';
+        }
+        colMap.forEach(col => {
+          let val = 0;
+          if (col.isTotal) {
+            val = pt['__total__'] || 0;
+          } else {
+            val = pt[col.type + '|||' + col.loadStatus] || 0;
+          }
+          const formatted = val ? val.toLocaleString() : '–';
+          html += `<td style="text-align:right;background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">${formatted}</td>`;
+        });
+        html += '</tr>';
+        afterRow.after(html);
+      });
+
+      console.log('Port Total rows injected:', groups.length);
+    }
+
+    // Defer slightly to let Bootstrap tab + pivot render settle
+    setTimeout(doInject, 120);
   }
 
 
@@ -424,11 +429,10 @@
       sorters: Object.keys(sorters).length > 0 ? sorters : undefined,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
-        // DOM-inject Port Total rows after pivot renders
         if (portTotals) {
-          // Remove any previously injected rows first
           pivotUI.find('tr.port-total-row').remove();
-          injectPortTotalRows(pivotUI, portTotals);
+          const table = pivotUI.find('table.pvtTable').first();
+          injectPortTotalRows(table, portTotals);
         }
       }
     };
