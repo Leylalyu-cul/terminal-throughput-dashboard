@@ -248,49 +248,103 @@
     });
   }
 
-  // ── Port subtotal injection for Port x Lane x Type ──────────────────────
-  // PivotTable.js has no native subtotal. We insert a synthetic "〔Total〕" Lane
-  // row per Port so it appears as a real row in the table.
-  function addPortSubtotals(data) {
-    // For each (Port, TYPE, Load Status) combination, generate a 〔Port Total〕 Lane row
-    // so that every column in the pivot has a value in the subtotal row.
-    const portMap = {};
+  // ── Port subtotal: compute aggregated values per Port for DOM injection ──
+  // Returns { port -> { 'TYPE|||LoadStatus' -> totalActualTEU, ... } }
+  function computePortTotals(data) {
+    const map = {};
     data.forEach(r => {
       const p = String(r['Port'] || '');
-      if (!portMap[p]) portMap[p] = [];
-      portMap[p].push(r);
+      if (!p) return;
+      if (!map[p]) map[p] = {};
+      const ck = String(r['TYPE'] || '') + '|||' + String(r['Load Status'] || '');
+      map[p][ck] = (map[p][ck] || 0) + (Number(r['Actual TEU']) || 0);
+      // Also store row total
+      map[p]['__total__'] = (map[p]['__total__'] || 0) + (Number(r['Actual TEU']) || 0);
+    });
+    return map;
+  }
+
+  // ── Inject Port Total rows into rendered pivot table via DOM ──────────────
+  // Called after pivotUI renders. Reads the column header order, then for each
+  // Port group inserts a highlighted subtotal row.
+  function injectPortTotalRows(tableEl, portTotals) {
+    const table = tableEl.find('table.pvtTable').first();
+    if (!table.length) return;
+
+    // Parse column headers: each th in header rows gives us (TYPE, Load Status) or Totals
+    // Header structure: row0 = TYPE spans, row1 = Load Status cells
+    const headerRows = table.find('thead tr');
+    if (headerRows.length < 2) return;
+
+    // Build column index → { type, loadStatus } map
+    // We need to know: for each data column (td index), what is TYPE and Load Status?
+    // Count of row-header cols (the left stub cols)
+    const stubCols = table.find('tbody tr').first().find('th').length;
+
+    // Parse TYPE row (headerRows[0]): skip stub cols, then TYPE th with colspan
+    const colMap = []; // index from 0 = first data col
+    const typeRow = $(headerRows[0]).find('th.pvtColLabel');
+    typeRow.each(function() {
+      const type = $(this).text().trim();
+      const span = parseInt($(this).attr('colspan') || '1');
+      for (let i = 0; i < span; i++) colMap.push({ type, loadStatus: '' });
+    });
+    // Also add Totals col if present
+    const totalsHdr = $(headerRows[0]).find('th.pvtTotalLabel');
+    if (totalsHdr.length) colMap.push({ type: '__totals__', loadStatus: '' });
+
+    // Parse Load Status row (headerRows[1]): should align 1:1 with colMap
+    const lsRow = $(headerRows[1]).find('th.pvtColLabel');
+    lsRow.each(function(i) {
+      if (colMap[i]) colMap[i].loadStatus = $(this).text().trim();
     });
 
-    const result = [];
-    Object.entries(portMap).forEach(([port, rows]) => {
-      // Group by (TYPE, Load Status) within this Port
-      const comboMap = {};
-      rows.forEach(r => {
-        const ck = String(r['TYPE'] || '') + '|||' + String(r['Load Status'] || '');
-        if (!comboMap[ck]) comboMap[ck] = { TYPE: r['TYPE'], 'Load Status': r['Load Status'], 'Actual TEU': 0, 'Booking TEU': 0 };
-        comboMap[ck]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
-        comboMap[ck]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
-      });
+    // Now walk body rows, group by first th (Port), insert subtotal after last Lane of each Port
+    const bodyRows = table.find('tbody tr');
+    let currentPort = null;
+    let portStartIdx = -1;
+    const groups = []; // { port, startIdx, endIdx }
 
-      // One 〔Port Total〕 row per combo
-      Object.values(comboMap).forEach(combo => {
-        const sub = {};
-        // Copy non-critical fields from first row as context
-        Object.keys(rows[0]).forEach(k => { sub[k] = rows[0][k]; });
-        sub['Port']         = port;
-        sub['Lane']         = '〔Port Total〕';
-        sub['TYPE']         = combo['TYPE'];
-        sub['Load Status']  = combo['Load Status'];
-        sub['Actual TEU']   = combo['Actual TEU'];
-        sub['Booking TEU']  = combo['Booking TEU'];
-        sub['Fulfill Rate'] = combo['Booking TEU'] > 0 ? combo['Actual TEU'] / combo['Booking TEU'] : 0;
-        result.push(sub);
-      });
-
-      // Then all original rows for this Port
-      rows.forEach(r => result.push(r));
+    bodyRows.each(function(idx) {
+      const portTh = $(this).find('th.pvtRowLabel').first();
+      if (portTh.length && !portTh.hasClass('pvtSubtotal')) {
+        // New port encountered (rowspan cell)
+        if (currentPort !== null) {
+          groups.push({ port: currentPort, startIdx: portStartIdx, endIdx: idx - 1 });
+        }
+        currentPort = portTh.text().trim();
+        portStartIdx = idx;
+      }
     });
-    return result;
+    if (currentPort !== null) {
+      groups.push({ port: currentPort, startIdx: portStartIdx, endIdx: bodyRows.length - 1 });
+    }
+
+    // Insert subtotal row after each group
+    // We insert from last to first to avoid index shifting
+    groups.slice().reverse().forEach(g => {
+      if (!portTotals[g.port]) return;
+      const ptData = portTotals[g.port];
+      const afterRow = $(bodyRows[g.endIdx]);
+
+      // Build td cells: stub (Port label already spanned), Lane label, then data cols
+      let html = '<tr class="port-total-row" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;">';
+      html += '<td class="pvtRowLabel" style="background:#d0e4ff;font-weight:700;color:#1a3c6e;padding:4px 8px;">〔Port Total〕</td>';
+
+      colMap.forEach(col => {
+        if (col.type === '__totals__') {
+          const total = ptData['__total__'] || 0;
+          html += '<td style="text-align:right;padding:4px 8px;">' + (total ? total.toLocaleString() : '') + '</td>';
+        } else {
+          const ck = col.type + '|||' + col.loadStatus;
+          const val = ptData[ck] || 0;
+          html += '<td style="text-align:right;padding:4px 8px;">' + (val ? val.toLocaleString() : '') + '</td>';
+        }
+      });
+      html += '</tr>';
+
+      afterRow.after(html);
+    });
   }
 
 
@@ -329,12 +383,10 @@
 
   function renderPivot(cfg) {
     const src = cfg.computed ? computedMap[cfg.id] : rawData;
-    let filtered = applyFilter(src, cfg.filter);
+    const filtered = applyFilter(src, cfg.filter);
 
-    // For Port x Lane x Type: inject per-Port subtotal rows
-    if (cfg.subtotalRows) {
-      filtered = addPortSubtotals(filtered);
-    }
+    // Pre-compute Port totals for DOM injection (Port x Lane x Type only)
+    const portTotals = cfg.subtotalRows ? computePortTotals(filtered) : null;
 
     const target = document.getElementById('pivot-' + cfg.id);
     target.innerHTML = '';
@@ -369,6 +421,12 @@
       sorters: Object.keys(sorters).length > 0 ? sorters : undefined,
       onRefresh: function(pivotUI) {
         pivotUI.find('.pvtGrandTotal').addClass('pvtGrandTotal');
+        // DOM-inject Port Total rows after pivot renders
+        if (portTotals) {
+          // Remove any previously injected rows first
+          pivotUI.find('tr.port-total-row').remove();
+          injectPortTotalRows(pivotUI, portTotals);
+        }
       }
     };
 
