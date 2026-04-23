@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-grid.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-theme-balham.css">
+  <link rel="stylesheet" href="https://unpkg.com/ag-grid@30.0.6/styles/ag-grid.css">
+  <link rel="stylesheet" href="https://unpkg.com/ag-grid@30.0.6/styles/ag-theme-balham.css">
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31/dist/ag-grid-community.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@30.0.6/dist/ag-grid-community.min.noHeader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; background: #f5f7fa; margin: 0; padding: 0; }
     .nav-tabs { margin-bottom: 0; background: #fff; padding: 0 20px; border-bottom: 2px solid #ddd; }
@@ -22,9 +23,13 @@
     #chart-container { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin-bottom: 15px; height: 260px; }
     .ag-theme-balham .ag-row.row-port-total { background: #dce8fe !important; font-weight: 700; }
     .ag-theme-balham .ag-row.row-port-total .ag-cell { color: #1a3a8f; }
+    .ag-theme-balham .ag-row.row-group { font-weight: 600; }
     .subtitle { font-size: 11px; color: #888; margin-top: 3px; }
     .tab-count { background: #2c5aa0; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
     #chart-weekly-canvas { max-height: 180px; }
+    .pivot-field-list { background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 10px; margin-bottom: 10px; }
+    .pivot-field-list .field-item { display: inline-block; background: #e3ebf9; border: 1px solid #b3c6e8; border-radius: 4px; padding: 4px 10px; margin: 3px; font-size: 12px; color: #2c5aa0; cursor: default; }
+    .pivot-field-list .field-label { font-weight: 700; margin-bottom: 6px; color: #555; font-size: 11px; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -55,20 +60,20 @@
 <script>
 // ─── DATA ────────────────────────────────────────────────────────────────────
 let rawData = [];
+let grids = {}; // cache grid instances
 
-fetch('https://Leylalyu-cul.github.io/terminal-throughput-dashboard/data/pivot_data.json')
-  .then(r => r.json())
-  .then(data => {
-    rawData = data;
-    initDashboard();
-  })
-  .catch(() => {
-    document.body.innerHTML += '<div style="padding:20px;color:red;font-size:16px">Failed to load data. Please refresh.</div>';
+fetch('data/pivot_data.zip')
+  .then(r => r.arrayBuffer())
+  .then(buf => JSZip.loadAsync(buf))
+  .then(zip => zip.file('pivot_data.json').async('string'))
+  .then(txt => { rawData = JSON.parse(txt); initDashboard(); })
+  .catch(err => {
+    document.body.innerHTML += '<div style="padding:20px;color:red">Failed to load data: ' + err.message + '</div>';
+    console.error(err);
   });
 
 function initDashboard() {
 
-// Pre-compute YoY / MoM helpers
 const prevYear  = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
 const prevMonth = mo => {
   if (!mo) return '';
@@ -78,83 +83,69 @@ const prevMonth = mo => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-function aggTEU(data, groupBy) {
-  const map = {};
-  data.forEach(r => {
-    const k = groupBy.map(f => (r[f] ?? '')).join('|');
-    if (!map[k]) { map[k] = { ...r }; map[k]['Actual TEU'] = 0; map[k]['Booking TEU'] = 0; }
-    map[k]['Actual TEU']  += (r['Actual TEU']  || 0);
-    map[k]['Booking TEU'] += (r['Booking TEU'] || 0);
-  });
-  return Object.values(map);
-}
-
-function buildYoYMoM(baseData, groupFields, extraFields = []) {
+function buildYoYMoM(baseData, groupFields) {
   const aggMap = {};
   baseData.forEach(r => {
     const gf = groupFields.map(f => (r[f] ?? '')).join('|');
-    if (!aggMap[gf]) { aggMap[gf] = { ...r, 'Actual TEU': 0 }; }
+    if (!aggMap[gf]) aggMap[gf] = { ...r, 'Actual TEU': 0 };
     aggMap[gf]['Actual TEU'] += (r['Actual TEU'] || 0);
-    extraFields.forEach(f => { aggMap[gf][f] = r[f]; });
   });
-
   const valMap = {};
   Object.values(aggMap).forEach(r => {
     const vk = groupFields.map(f => (r[f] ?? '')).join('|');
     valMap[vk] = r['Actual TEU'];
   });
-
   return Object.values(aggMap).map(r => {
     const vk = groupFields.map(f => (r[f] ?? '')).join('|');
-    const lyk = [prevYear(r.ATD_Year), r['ATD Month']].join('|');
-    const lmk = [r.ATD_Year, prevMonth(r['ATD Month'])].join('|');
-    r['VS. Last Year']  = r['Actual TEU'] - (valMap[lyk] || 0);
-    r['VS. Last Month'] = r['Actual TEU'] - (valMap[lmk] || 0);
+    r['VS. Last Year']  = r['Actual TEU'] - (valMap[[prevYear(r.ATD_Year), r['ATD Month']].join('|')] || 0);
+    r['VS. Last Month'] = r['Actual TEU'] - (valMap[[r.ATD_Year, prevMonth(r['ATD Month'])].join('|')] || 0);
     return r;
   });
 }
 
 const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
-const dataWeek  = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
 const dataOB    = buildYoYMoM(rawData.filter(r => ['OUT','T/S OUT'].includes(r.TYPE)), ['Port','ATD_Year','ATD Month']);
 const dataIB    = buildYoYMoM(rawData.filter(r => ['IN','T/S IN'].includes(r.TYPE)),  ['Port','ATD_Year','ATD Month']);
 
-// AG Grid License (Community = no key needed)
-</script>
-<script>
 // ─── CHART ────────────────────────────────────────────────────────────────────
-let weeklyChart = null;
 function drawWeeklyChart(data) {
-  const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
-  if (weeklyChart) weeklyChart.destroy();
-  // Sort by week number
-  const sorted = [...data].sort((a, b) => {
-    const wa = parseInt(String(a.Week || '').replace(/\D/g, '')) || 0;
-    const wb = parseInt(String(b.Week || '').replace(/\D/g, '')) || 0;
-    return wa - wb;
+  const ctx = document.getElementById('chart-weekly-canvas');
+  if (!ctx) return;
+  const w2d = new Date().getTimezoneOffset();
+  // aggregate by week
+  const weekMap = {};
+  data.forEach(r => {
+    const w = String(r.Week || '');
+    if (!w) return;
+    weekMap[w] = (weekMap[w] || 0) + (r['Actual TEU'] || 0);
   });
-  weeklyChart = new Chart(ctx, {
+  const labels = Object.keys(weekMap).sort((a,b) => {
+    const na = parseInt(a.replace(/\D/g,''));
+    const nb = parseInt(b.replace(/\D/g,''));
+    return na - nb;
+  });
+  const values = labels.map(l => weekMap[l]);
+
+  if (window._weeklyChart) window._weeklyChart.destroy();
+  window._weeklyChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: sorted.map(r => r.Week),
+      labels: labels,
       datasets: [{
         label: 'Actual TEU',
-        data: sorted.map(r => r['Actual TEU'] || 0),
+        data: values,
         borderColor: '#2c5aa0',
         backgroundColor: 'rgba(44,90,160,0.1)',
         fill: true,
         tension: 0.3,
         pointRadius: 4,
-        pointHoverRadius: 6
+        pointBackgroundColor: '#2c5aa0'
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, position: 'top' },
-        title: { display: true, text: 'Weekly Trend — Actual TEU (2026)', font: { size: 14 } }
-      },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } } },
       scales: {
         y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
         x: { title: { display: true, text: 'Week' } }
@@ -163,190 +154,199 @@ function drawWeeklyChart(data) {
   });
 }
 
-// ─── AG GRID ──────────────────────────────────────────────────────────────────
-function makeGridOpts(containerId, rowData, colDefs, defaultColDef) {
-  const opts = {
-    columnDefs: colDefs,
+// ─── GRID HELPERS ─────────────────────────────────────────────────────────────
+function defaultColDef() {
+  return {
+    sortable: true, filter: true, resizable: true,
+    cellStyle: { textAlign: 'left' }
+  };
+}
+
+function teuCol(field = 'Actual TEU') {
+  return {
+    field: field,
+    headerName: field,
+    aggFunc: 'sum',
+    cellStyle: { textAlign: 'right' },
+    valueFormatter: p => p.value != null ? p.value.toLocaleString() : ''
+  };
+}
+
+function initGrid(divId, rowData, colDefs, options = {}) {
+  const existing = grids[divId];
+  if (existing) { existing.setRowData([]); existing.destroy(); }
+
+  const defaultOpts = {
     rowData: rowData,
-    defaultColDef: Object.assign({
-      sortable: true,
-      resizable: true,
-      filter: true,
-      minWidth: 80
-    }, defaultColDef || {}),
+    columnDefs: colDefs,
+    defaultColDef: defaultColDef(),
     animateRows: true,
     suppressMovable: false,
-    onGridReady: params => params.api.sizeColumnsToFit()
+    enableRangeSelection: true,
+    enableCharts: false,
   };
-  return opts;
+  const merged = Object.assign(defaultOpts, options);
+
+  const gridDiv = document.getElementById(divId);
+  grids[divId] = new agGrid.Grid(gridDiv, merged);
+  return grids[divId];
 }
 
-// Helper: integer formatter
-const fmtInt = v => (v == null) ? '' : v.toLocaleString('en-US');
+// ─── PORT × LANE × TYPE  (row grouping by Port) ─────────────────────────────
+function renderPortLaneType() {
+  const cfg = { rows: ['Port','Lane'], cols: ['TYPE','Load Status'], vals: ['Actual TEU'], filter: { 'ATD_Year': '2026' } };
+  const src = dataY2026;
+  const filtered = applyFilter(src, cfg.filter);
 
-// Helper: percent formatter
-const fmtPct = v => (v == null) ? '' : (v * 100).toFixed(1) + '%';
+  const colDefs = [
+    { field: 'Port', rowGroup: true, hide: true },
+    { field: 'Lane', headerName: 'Lane', sortable: true, filter: true },
+    ...buildColsForCombo(['TYPE','Load Status'], 'Actual TEU', filtered),
+  ];
 
-// Helper: render row with custom data
-function makeColDef(field, header, agg = 'sum', enablePivot = false) {
-  return {
-    field,
-    headerName: header,
-    enablePivot,
-    aggFunc: agg === 'sum' ? 'sum' : (agg === 'avg' ? 'avg' : null),
-    valueFormatter: params => {
-      if (field === 'Fulfill Rate') return fmtPct(params.value);
-      if (typeof params.value === 'number') return fmtInt(params.value);
-      return params.value;
-    },
-    type: typeof field === 'string' && (field.includes('TEU') || field === 'Fulfill Rate') ? 'numericColumn' : null
-  };
-}
+  const legendEl = document.querySelector('#tab-port-lane-type .legend');
+  if (legendEl) legendEl.textContent = 'Row: Port + Lane  |  Col: TYPE + Load Status  |  Filter: ATD_Year=2026  |  Val: Actual TEU  |  (Drag Lane to Rows to re-group)';
 
-// ─── Tab 1: Port x Month ──────────────────────────────────────────────────────
-const portMonthData = aggTEU(dataY2026, ['Port','ATD Month']);
-const portMonthCols = [
-  makeColDef('Port', 'Port', 'sum'),
-  makeColDef('ATD Month', 'ATD Month', 'sum'),
-  makeColDef('Actual TEU', 'Actual TEU', 'sum')
-];
-
-// ─── Tab 2: Lane x Month ──────────────────────────────────────────────────────
-const laneMonthData = aggTEU(dataY2026, ['Lane','ATD Month']);
-const laneMonthCols = [
-  makeColDef('Lane', 'Lane', 'sum'),
-  makeColDef('ATD Month', 'ATD Month', 'sum'),
-  makeColDef('Actual TEU', 'Actual TEU', 'sum')
-];
-
-// ─── Tab 3: Port x Lane x Type ───────────────────────────────────────────────
-// Use AG Grid row grouping via autoGroupColumnDef
-const pltData = aggTEU(dataY2026, ['Port','Lane','TYPE','Load Status']);
-const pltCols = [
-  { field: 'Port',        headerName: 'Port',        rowGroup: true, hide: true },
-  { field: 'Lane',        headerName: 'Lane',        rowGroup: true, hide: true },
-  { field: 'TYPE',        headerName: 'TYPE',        enableRowGroup: true },
-  { field: 'Load Status', headerName: 'Load Status', enableRowGroup: true },
-  makeColDef('Actual TEU', 'Actual TEU', 'sum')
-];
-
-// ─── Tab 4: Weekly Trend ──────────────────────────────────────────────────────
-const weekMap = {};
-dataWeek.forEach(r => {
-  const w = r.Week;
-  if (!weekMap[w]) weekMap[w] = { Week: w, 'Actual TEU': 0 };
-  weekMap[w]['Actual TEU'] += (r['Actual TEU'] || 0);
-});
-const weekData = Object.values(weekMap).sort((a, b) => {
-  const wa = parseInt(String(a.Week||'').replace(/\D/g,''))||0;
-  const wb = parseInt(String(b.Week||'').replace(/\D/g,''))||0;
-  return wa - wb;
-});
-const weekCols = [
-  makeColDef('Week', 'Week', 'sum'),
-  makeColDef('Actual TEU', 'Actual TEU', 'sum')
-];
-
-// ─── Tab 5: Booking vs Actual ─────────────────────────────────────────────────
-const bkaData = aggTEU(dataY2026, ['Port']);
-bkaData.forEach(r => {
-  r['Fulfill Rate'] = r['Booking TEU'] > 0 ? r['Actual TEU'] / r['Booking TEU'] : 0;
-  r['Gap'] = r['Actual TEU'] - r['Booking TEU'];
-});
-const bkaCols = [
-  makeColDef('Port', 'Port', 'sum'),
-  makeColDef('Booking TEU', 'Booking TEU', 'sum'),
-  makeColDef('Actual TEU', 'Actual TEU', 'sum'),
-  {
-    field: 'Gap',
-    headerName: 'Gap (Actual-Booking)',
-    type: 'numericColumn',
-    valueFormatter: p => fmtInt(p.value)
-  },
-  {
-    field: 'Fulfill Rate',
-    headerName: 'Fulfill Rate',
-    type: 'numericColumn',
-    valueFormatter: p => fmtPct(p.value)
-  }
-];
-
-// ─── Tab 6 & 7: OB / IB ───────────────────────────────────────────────────────
-const obibCols = (title) => [
-  makeColDef('Port', 'Port', 'sum'),
-  makeColDef('ATD_Year', 'Year', 'sum'),
-  makeColDef('ATD Month', 'Month', 'sum'),
-  makeColDef('Actual TEU', 'Actual TEU', 'sum'),
-  makeColDef('VS. Last Year', 'VS. Last Year', 'sum'),
-  makeColDef('VS. Last Month', 'VS. Last Month', 'sum')
-];
-
-// ─── INIT ─────────────────────────────────────────────────────────────────────
-const grids = {};
-
-function initGrid(tabId, containerId, rowData, colDefs, extraOpts) {
-  const gridDiv = document.getElementById(containerId);
-  const opts = makeGridOpts(containerId, rowData, colDefs, extraOpts);
-  if (tabId === 'tab-port-lane-type') {
-    opts.autoGroupColumnDef = {
+  initGrid('grid-port-lane-type', filtered, colDefs, {
+    autoGroupColumnDef: {
       headerName: 'Port / Lane',
       minWidth: 200,
       cellRendererParams: { suppressCount: false }
-    };
-    opts.groupDefaultExpanded = 1;
-    opts.suppressAggFuncInHeader = false;
-  }
-  grids[tabId] = agGrid.createGrid(gridDiv, opts);
+    },
+    groupDefaultExpanded: 0,
+    animateRows: true,
+    suppressAggFuncInHeader: false,
+  });
 }
 
-// Wait for tab switch to init charts
-$('#mainTabs').on('shown.bs.tab', function(e) {
-  const tabId = $(e.target).attr('href');
-  if (tabId === '#tab-weekly-trend' && !weeklyChart) {
-    drawWeeklyChart(weekData);
-  }
-  if (tabId === '#tab-port-lane-type' && !grids['tab-port-lane-type']) {
-    initGrid('tab-port-lane-type', 'grid-port-lane-type', pltData, pltCols);
-  }
-  // Size columns on tab shown
-  if (grids[tabId]) grids[tabId].api.sizeColumnsToFit();
-});
+// ─── GENERIC TAB ──────────────────────────────────────────────────────────────
+function buildColsForCombo(cols, valField, data) {
+  // collect unique col combos
+  const comboSet = new Set();
+  data.forEach(r => {
+    comboSet.add(cols.map(f => r[f] ?? '').join('||'));
+  });
+  const combos = [...comboSet].sort();
+  return combos.map(combo => {
+    const parts = combo.split('||');
+    const colVal = parts.join(' × ');
+    return {
+      field: combo,
+      headerName: colVal,
+      aggFunc: 'sum',
+      cellStyle: { textAlign: 'right' },
+      valueFormatter: p => p.value != null ? p.value.toLocaleString() : '',
+      sortPriority: 0
+    };
+  });
+}
 
-// Build tabs
+function applyFilter(data, filter) {
+  return data.filter(row => {
+    for (const [k, v] of Object.entries(filter || {})) {
+      if (String(row[k] ?? '') !== v) return false;
+    }
+    return true;
+  });
+}
+
+function renderTab(cfg, divId, dataSrc) {
+  const filtered = applyFilter(dataSrc || rawData, cfg.filter);
+  const cols = cfg.cols.map(f => ({ field: f, sortable: true, filter: true }));
+  const vals = cfg.vals.map(f => ({
+    field: f,
+    headerName: f,
+    aggFunc: f === 'Fulfill Rate' ? 'avg' : 'sum',
+    cellStyle: { textAlign: 'right' },
+    valueFormatter: p => {
+      if (p.value == null) return '';
+      if (f === 'Fulfill Rate') return (p.value * 100).toFixed(1) + '%';
+      return p.value.toLocaleString();
+    }
+  }));
+  const colDefs = [
+    ...cfg.rows.map(f => ({ field: f, sortable: true, filter: true })),
+    ...cols,
+    ...vals
+  ];
+  const legendEl = document.querySelector('#' + divId + ' + .legend, #' + divId.replace('grid-','tab-') + ' .legend');
+  initGrid(divId, filtered, colDefs, {
+    groupDefaultExpanded: 0,
+    autoGroupColumnDef: { minWidth: 150 },
+  });
+}
+
+// ─── TAB INIT ─────────────────────────────────────────────────────────────────
 const tabs = [
-  { id: 'tab-port-month',       title: 'Port × Month',       legend: 'Row: Port | Col: ATD Month | Val: Actual TEU | Filter: ATD_Year=2026' },
-  { id: 'tab-lane-month',       title: 'Lane × Month',       legend: 'Row: Lane | Col: ATD Month | Val: Actual TEU | Filter: ATD_Year=2026' },
-  { id: 'tab-port-lane-type',   title: 'Port × Lane × Type', legend: 'Row: Port + Lane (grouped) | Col: TYPE + Load Status | Val: Actual TEU | Filter: ATD_Year=2026' },
-  { id: 'tab-weekly-trend',     title: 'Weekly Trend',        legend: 'Row: Week | Val: Actual TEU | Chart: Line | Filter: ATD_Year=2026' },
-  { id: 'tab-booking-actual',   title: 'Booking vs Actual',   legend: 'Row: Port | Val: Booking TEU + Actual TEU + Gap + Fulfill Rate | Filter: ATD_Year=2026' },
-  { id: 'tab-outbound',         title: 'Outbound Report',     legend: 'Row: Port | Col: Year + Month | Val: Actual TEU + VS LY + VS LM' },
-  { id: 'tab-inbound',          title: 'Inbound Report',      legend: 'Row: Port | Col: Year + Month | Val: Actual TEU + VS LY + VS LM' }
+  {
+    id: 'port-month', title: 'Port × Month', data: dataY2026,
+    filter: { 'ATD_Year': '2026' },
+    rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'],
+    legend: 'Row: Port  |  Col: ATD Month  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
+  },
+  {
+    id: 'lane-month', title: 'Lane × Month', data: dataY2026,
+    filter: { 'ATD_Year': '2026' },
+    rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'],
+    legend: 'Row: Lane  |  Col: ATD Month  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
+  },
+  { id: 'port-lane-type', title: 'Port × Lane × Type', data: dataY2026, isSpecial: true },
+  {
+    id: 'weekly-trend', title: 'Weekly Trend', data: dataY2026,
+    filter: { 'ATD_Year': '2026' },
+    rows: ['Week'], cols: [], vals: ['Actual TEU'],
+    legend: 'Row: Week  |  Filter: ATD_Year=2026  |  Val: Actual TEU'
+  },
+  {
+    id: 'booking-actual', title: 'Booking vs Actual', data: dataY2026,
+    filter: { 'ATD_Year': '2026' },
+    rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU', 'Fulfill Rate'],
+    legend: 'Row: Port  |  Filter: ATD_Year=2026  |  Val: Booking TEU + Actual TEU + Fulfill Rate'
+  },
+  {
+    id: 'outbound', title: 'Outbound Report', data: dataOB,
+    rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+    legend: 'Row: Port  |  Col: ATD_Year + ATD Month  |  Val: Actual TEU + VS LY + VS LM'
+  },
+  {
+    id: 'inbound', title: 'Inbound Report', data: dataIB,
+    rows: ['Port'], cols: ['ATD_Year', 'ATD Month'], vals: ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
+    legend: 'Row: Port  |  Col: ATD_Year + ATD Month  |  Val: Actual TEU + VS LY + VS LM'
+  },
 ];
 
-tabs.forEach((t, i) => {
-  $('#mainTabs').append(`<li role="presentation"${i===0?' class="active"':''}><a href="#${t.id}" aria-controls="${t.id}" role="tab" data-toggle="tab">${t.title}</a></li>`);
-  $(`#${t.id} .legend`).text(t.legend);
+tabs.forEach(tab => {
+  const li = document.createElement('li');
+  li.innerHTML = `<a href="#tab-${tab.id}" data-toggle="tab" role="tab">${tab.title}</a>`;
+  document.getElementById('mainTabs').appendChild(li);
+
+  // update legend div
+  const tabEl = document.getElementById('tab-' + tab.id);
+  const legendDiv = tabEl ? tabEl.querySelector('.legend') : null;
+  if (legendDiv && tab.legend) legendDiv.textContent = tab.legend;
 });
 
-$('#mainTabs a:first').tab('show');
-
-// Init first tab immediately
-initGrid('tab-port-month', 'grid-port-month', portMonthData, portMonthCols);
-
-// Init others lazily on tab switch
-const lazyInit = {
-  'tab-lane-month':      () => initGrid('tab-lane-month',      'grid-lane-month',      laneMonthData, laneMonthCols),
-  'tab-booking-actual':  () => initGrid('tab-booking-actual',  'grid-booking-actual',  bkaData, bkaCols),
-  'tab-outbound':        () => initGrid('tab-outbound',        'grid-outbound',        dataOB, obibCols()),
-  'tab-inbound':         () => initGrid('tab-inbound',         'grid-inbound',         dataIB, obibCols())
-};
-
-$('#mainTabs').on('shown.bs.tab', function(e) {
-  const tabId = $(e.target).attr('href');
-  if (lazyInit[tabId]) { lazyInit[tabId](); delete lazyInit[tabId]; }
-  if (tabId === '#tab-weekly-trend' && weekData.length) drawWeeklyChart(weekData);
+$('#mainTabs a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
+  const id = e.target.getAttribute('href').replace('#tab-', '');
+  if (id === 'weekly-trend' && !window._weeklyChart) {
+    drawWeeklyChart(dataY2026);
+  }
+  if (!grids['grid-' + id]) {
+    const tab = tabs.find(t => t.id === id);
+    if (!tab) return;
+    if (tab.isSpecial) {
+      if (id === 'port-lane-type') renderPortLaneType();
+    } else {
+      renderTab({ filter: tab.filter, rows: tab.rows, cols: tab.cols, vals: tab.vals }, 'grid-' + id, tab.data);
+    }
+  }
 });
-  } // end initDashboard
+
+// trigger first tab
+document.getElementById('mainTabs').querySelector('li').classList.add('active');
+document.getElementById('tab-port-month').classList.add('active');
+
+} // initDashboard
 </script>
 </body>
 </html>
