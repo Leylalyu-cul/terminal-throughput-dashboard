@@ -4,14 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
-  <!-- Bootstrap -->
   <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.flexmonster.com/2.9.4/flexmonster.min.css">
   <style>
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
     .tab-content { background: #fff; border: 1px solid #dee2e6; border-top: none; padding: 16px; min-height: 600px; }
     .legend { font-size: 12px; color: #888; margin-bottom: 10px; padding: 4px 8px; background: #f8f9fa; border-radius: 4px; }
-    .tab-pane { position: relative; }
     .pivot-wrap { width: 100%; height: 580px; }
     #chart-weekly-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
     .error-msg { color: #dc3545; font-size: 16px; padding: 20px; }
@@ -21,12 +20,12 @@
 <body>
 
 <div class="container-fluid p-3">
-  <h4 class="mb-3">📊 Terminal Throughput Dashboard</h4>
+  <h4 class="mb-3">Terminal Throughput Dashboard</h4>
 
   <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-port-month">Port × Month</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-lane-month">Lane × Month</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-port-lane-type">Port × Lane × Type</a></li>
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-port-month">Port x Month</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-lane-month">Lane x Month</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-port-lane-type">Port x Lane x Type</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">Weekly Trend</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-booking-actual">Booking vs Actual</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-outbound">Outbound Report</a></li>
@@ -59,17 +58,17 @@
     </div>
 
     <div class="tab-pane fade" id="tab-booking-actual">
-      <div class="legend">Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate (Avg)</div>
+      <div class="legend">Row: Port | Filter: ATD_Year=2026 | Val: Booking TEU + Actual TEU + Fulfill Rate</div>
       <div id="pivot-booking-actual" class="pivot-wrap"></div>
     </div>
 
     <div class="tab-pane fade" id="tab-outbound">
-      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS. Last Year + VS. Last Month</div>
+      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS LY + VS LM</div>
       <div id="pivot-outbound" class="pivot-wrap"></div>
     </div>
 
     <div class="tab-pane fade" id="tab-inbound">
-      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS. Last Year + VS. Last Month</div>
+      <div class="legend">Row: Port | Col: ATD_Year + ATD Month | Val: Actual TEU + VS LY + VS LM</div>
       <div id="pivot-inbound" class="pivot-wrap"></div>
     </div>
 
@@ -83,22 +82,26 @@
 <!-- Chart.js -->
 <script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Flexmonster -->
-<link rel="stylesheet" href="https://cdn.flexmonster.com/2.9.4/flexmonster.min.css">
 <script src="https://cdn.flexmonster.com/2.9.4/flexmonster.js"></script>
 
 <script>
-// ─── DATA LOADING ─────────────────────────────────────────────────────────────
+'use strict';
+
+// ─── DATA LOADING ────────────────────────────────────────────────────────────
 let rawData = [];
 let weeklyChart = null;
 
-// Load from zip file (JSON is too large to upload directly to GitHub)
 fetch('data/pivot_data.zip')
   .then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status + ': data/pivot_data.zip not found. Please upload pivot_data.zip to the data/ folder.');
+    if (!r.ok) throw new Error('HTTP ' + r.status + ': data/pivot_data.zip not found');
     return r.arrayBuffer();
   })
   .then(buf => JSZip.loadAsync(buf))
-  .then(zip => zip.file('pivot_data.json').async('string'))
+  .then(zip => {
+    const jsonFile = zip.file('pivot_data.json');
+    if (!jsonFile) throw new Error('pivot_data.json not found inside zip');
+    return jsonFile.async('string');
+  })
   .then(txt => JSON.parse(txt))
   .then(data => {
     rawData = data;
@@ -106,11 +109,15 @@ fetch('data/pivot_data.zip')
   })
   .catch(err => {
     document.body.innerHTML +=
-      '<div class="error-msg" style="margin:40px">❌ ' + err.message + '</div>';
+      '<div class="error-msg" style="margin:40px">Failed to load data: ' + err.message + '</div>';
   });
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-const prevYear = yr => { const y = parseInt(yr); return isNaN(y) ? '' : String(y - 1); };
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+const prevYear = yr => {
+  const y = parseInt(yr);
+  return isNaN(y) ? '' : String(y - 1);
+};
+
 const prevMonth = mo => {
   if (!mo) return '';
   const [y, m] = mo.split('-').map(Number);
@@ -139,19 +146,74 @@ function buildYoYMoM(baseData, groupFields) {
   });
 }
 
+// ─── INIT ───────────────────────────────────────────────────────────────────
 function initDashboard() {
   const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
-  const dataOB = buildYoYMoM(rawData.filter(r => ['OUT','T/S OUT'].includes(r.TYPE)), ['Port','ATD_Year','ATD Month']);
-  const dataIB = buildYoYMoM(rawData.filter(r => ['IN','T/S IN'].includes(r.TYPE)),  ['Port','ATD_Year','ATD Month']);
+  const dataOB   = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r.TYPE)), ['Port', 'ATD_Year', 'ATD Month']);
+  const dataIB   = buildYoYMoM(rawData.filter(r => ['IN',  'T/S IN' ].includes(r.TYPE)), ['Port', 'ATD_Year', 'ATD Month']);
 
-  // ── Weekly chart ──────────────────────────────────────────────────────────
+  // ── Flexmonster fields (only fields that actually exist in data) ──────────
+  const fmLicense = 'ZGlzaGxvd3xGTEVYTU9OU1RFUlx8MTYwNzQ1ODAwMDAwMDAwfHxodHRwczovL3d3dy5mbGV4bW9uc3Rlci5jb20v';
+
+  // Build field list from first data row
+  const firstRow = (rawData[0] || {});
+  const fieldNames = Object.keys(firstRow).filter(k => k && k !== '__ROW_NUM__');
+
+  const fmFields = {};
+  fieldNames.forEach(k => {
+    fmFields[k] = { caption: k };
+  });
+
+  // Helper: build flexmonster report config
+  function fmReport(data, rows, cols, vals, filters) {
+    const slice = {};
+    if (rows && rows.length) {
+      slice.rows = rows.map(f => ({ uniqueName: f }));
+    }
+    if (cols && cols.length) {
+      slice.columns = cols.map(f => ({ uniqueName: f }));
+    }
+    if (vals && vals.length) {
+      slice.values = vals.map(f => ({
+        uniqueName: f,
+        aggregation: (f === 'Fulfill Rate') ? 'average' : 'sum'
+      }));
+    }
+    if (filters && filters.length) {
+      slice.filters = filters.map(f => ({ uniqueName: f }));
+    }
+
+    return {
+      dataSource: { data: data },
+      schema: fmFields,
+      slice: slice,
+      options: {
+        grid: { type: 'flat', showGrandTotals: 'on', showRowTotals: 'on', showColumnTotals: 'on' },
+        configuratorActive: false
+      }
+    };
+  }
+
+  // Render one pivot
+  function fmPivot(divId, data, rows, cols, vals, filters) {
+    new flexmonster({
+      container: divId,
+      licenseKey: fmLicense,
+      toolbar: true,
+      report: fmReport(data, rows, cols, vals, filters)
+    });
+  }
+
+  // ── Weekly Chart ───────────────────────────────────────────────────────────
   function drawWeeklyChart() {
     const weekly = {};
     dataY2026.forEach(r => {
       const w = String(r['Week'] || '');
       weekly[w] = (weekly[w] || 0) + (r['Actual TEU'] || 0);
     });
-    const sorted = Object.entries(weekly).sort((a, b) => parseInt(a[0].replace('W','')) - parseInt(b[0].replace('W','')));
+    const sorted = Object.entries(weekly).sort(
+      (a, b) => parseInt(a[0].replace(/\D/g, '')) - parseInt(b[0].replace(/\D/g, ''))
+    );
     const labels = sorted.map(e => e[0]);
     const values = sorted.map(e => e[1]);
 
@@ -166,13 +228,19 @@ function initDashboard() {
           data: values,
           borderColor: '#2c5aa0',
           backgroundColor: 'rgba(44,90,160,0.1)',
-          fill: true, tension: 0.3, pointRadius: 4,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
           pointBackgroundColor: '#2c5aa0'
         }]
       },
       options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } } },
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } }
+        },
         scales: {
           y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
           x: { title: { display: true, text: 'Week' } }
@@ -181,97 +249,29 @@ function initDashboard() {
     });
   }
 
-  // ── FLEXMONSTER CONFIG ─────────────────────────────────────────────────────
-  const fmLicense = 'ZGlzaGxvd3xGTEVYTU9OU1RFUlx8MTYwNzQ1ODAwMDAwMDAwfHxodHRwczovL3d3dy5mbGV4bW9uc3Rlci5jb20v'; // open-source license
-
-  function fmPivot(divId, data, rows, cols, vals, filters, fieldCaptionMap) {
-    // Build flat fields list from data
-    const fields = [];
-    const seen = new Set();
-    if (Array.isArray(data) && data.length > 0) {
-      Object.keys(data[0]).forEach(k => {
-        if (!seen.has(k) && k !== 'Lane Trade') { seen.add(k); fields.push({ name: k, caption: fieldCaptionMap[k] || k }); }
-      });
-    }
-
-    // Build slice
-    const slice = {};
-    if (rows && rows.length) slice.rows = rows.map(f => ({ uniqueName: f }));
-    if (cols && cols.length) slice.columns = cols.map(f => ({ uniqueName: f }));
-    if (vals && vals.length) slice.values = vals.map(f => ({ uniqueName: f, aggregation: f === 'Fulfill Rate (Avg)' ? 'average' : 'sum' }));
-    if (filters && filters.length) slice.filters = filters.map(f => ({ uniqueName: f }));
-
-    // month/numeric sort
-    const sorting = {
-      rowFields: rows ? rows.map(f => ({ field: f })) : [],
-      columnFields: cols ? cols.map(f => ({ field: f })) : []
-    };
-
-    new flexmonster({
-      container: divId,
-      licenseKey: fmLicense,
-      toolbar: true,
-      report: {
-        dataSource: { data: data },
-        schema: fields.map(f => ({ uniqueName: f.name, caption: f.caption })),
-        slice: slice,
-        options: {
-          grid: { type: 'flat', showGrandTotals: 'on', showRowTotals: 'on', showColumnTotals: 'on' },
-          configuratorActive: false,
-          viewing: { showAggregationLabels: true }
-        }
-      }
-    });
-  }
-
-  // Field caption map — keys match actual data field names
-  const fm = {
-    'Port': 'Port', 'Lane': 'Lane', 'Lane Trade': 'Lane Trade',
-    'TYPE': 'TYPE', 'Load Status': 'Load Status',
-    'ATD Month': 'ATD Month', 'ATD_Year': 'ATD Year', 'Week': 'Week',
-    'COC/SOC': 'COC/SOC', 'Actual TEU': 'Actual TEU', 'Booking TEU': 'Booking TEU',
-    'Fulfill Rate (Avg)': 'Fulfill Rate',
-    'VS. Last Year': 'VS. Last Year', 'VS. Last Month': 'VS. Last Month'
-  };
-
-  // ── INIT EACH TAB ───────────────────────────────────────────────────────────
-  // Port x Month
+  // ── Init all tabs ──────────────────────────────────────────────────────────
   fmPivot('pivot-port-month', dataY2026,
-    ['Port'], ['ATD Month'], ['Actual TEU'],
-    ['ATD_Year']);
+    ['Port'], ['ATD Month'], ['Actual TEU'], ['ATD_Year']);
 
-  // Lane x Month
   fmPivot('pivot-lane-month', dataY2026,
-    ['Lane'], ['ATD Month'], ['Actual TEU'],
-    ['ATD_Year']);
+    ['Lane'], ['ATD Month'], ['Actual TEU'], ['ATD_Year']);
 
-  // Port x Lane x Type
   fmPivot('pivot-port-lane-type', dataY2026,
-    ['Port', 'Lane'], ['TYPE', 'Load Status'], ['Actual TEU'],
-    ['ATD_Year']);
+    ['Port', 'Lane'], ['TYPE', 'Load Status'], ['Actual TEU'], ['ATD_Year']);
 
-  // Weekly Trend (chart + pivot)
   drawWeeklyChart();
   fmPivot('pivot-weekly-trend', dataY2026,
-    ['Week'], [], ['Actual TEU'],
-    ['ATD_Year']);
+    ['Week'], [], ['Actual TEU'], ['ATD_Year']);
 
-  // Booking vs Actual
   fmPivot('pivot-booking-actual', dataY2026,
-    ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate (Avg)'],
-    ['ATD_Year']);
+    ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate'], ['ATD_Year']);
 
-  // Outbound
   fmPivot('pivot-outbound', dataOB,
-    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    []);
+    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
 
-  // Inbound
   fmPivot('pivot-inbound', dataIB,
-    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'],
-    []);
-
-} // end initDashboard
+    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
+}
 </script>
 </body>
 </html>
