@@ -149,67 +149,72 @@ function buildYoYMoM(baseData, groupFields) {
 // ─── INIT ───────────────────────────────────────────────────────────────────
 function initDashboard() {
   const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
-  const dataOB   = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r.TYPE)), ['Port', 'ATD_Year', 'ATD Month']);
-  const dataIB   = buildYoYMoM(rawData.filter(r => ['IN',  'T/S IN' ].includes(r.TYPE)), ['Port', 'ATD_Year', 'ATD Month']);
+  const dataOB   = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r['TYPE'])), ['Port', 'ATD_Year', 'ATD Month']);
+  const dataIB   = buildYoYMoM(rawData.filter(r => ['IN',  'T/S IN' ].includes(r['TYPE'])), ['Port', 'ATD_Year', 'ATD Month']);
 
-  // ── Flexmonster fields (only fields that actually exist in data) ──────────
-  const fmLicense = 'ZGlzaGxvd3xGTEVYTU9OU1RFUlx8MTYwNzQ1ODAwMDAwMDAwfHxodHRwczovL3d3dy5mbGV4bW9uc3Rlci5jb20v';
+  // ── Flexmonster mapping: all fields in data ──────────────────────────────
+  // Flexmonster uses "mapping" (not "schema") to define field types
+  const baseMapping = {
+    'Port':         { type: 'string' },
+    'Lane':         { type: 'string' },
+    'TYPE':         { type: 'string' },
+    'Load Status':  { type: 'string' },
+    'ATD_Year':     { type: 'string' },
+    'ATD Month':    { type: 'string' },
+    'Week':         { type: 'string' },
+    'COC-SOC':      { type: 'string' },
+    'Actual TEU':   { type: 'number' },
+    'Booking TEU':  { type: 'number' },
+    'Fulfill Rate': { type: 'number' }
+  };
 
-  // Build field list from first data row
-  const firstRow = (rawData[0] || {});
-  const fieldNames = Object.keys(firstRow).filter(k => k && k !== '__ROW_NUM__');
-
-  const fmFields = {};
-  fieldNames.forEach(k => {
-    fmFields[k] = { caption: k };
+  const obibMapping = Object.assign({}, baseMapping, {
+    'VS. Last Year':  { type: 'number' },
+    'VS. Last Month': { type: 'number' }
   });
 
-  // Helper: build flexmonster report config
-  function fmReport(data, rows, cols, vals, filters) {
-    const slice = {};
-    if (rows && rows.length) {
-      slice.rows = rows.map(f => ({ uniqueName: f }));
-    }
-    if (cols && cols.length) {
-      slice.columns = cols.map(f => ({ uniqueName: f }));
-    }
-    if (vals && vals.length) {
-      slice.values = vals.map(f => ({
-        uniqueName: f,
-        aggregation: (f === 'Fulfill Rate') ? 'average' : 'sum'
-      }));
-    }
-    if (filters && filters.length) {
-      slice.filters = filters.map(f => ({ uniqueName: f }));
-    }
-
+  // ── Helper: build Flexmonster report ─────────────────────────────────────
+  function fmReport(data, mapping, rows, cols, vals, filters) {
     return {
-      dataSource: { data: data },
-      schema: fmFields,
-      slice: slice,
+      dataSource: {
+        data: data,
+        mapping: mapping
+      },
+      slice: {
+        rows:    rows.map(f => ({ uniqueName: f })),
+        columns: cols.map(f => ({ uniqueName: f })),
+        values:  vals.map(f => ({
+          uniqueName:  f,
+          aggregation: (f === 'Fulfill Rate') ? 'average' : 'sum'
+        })),
+        filters: filters.map(f => ({ uniqueName: f }))
+      },
       options: {
-        grid: { type: 'flat', showGrandTotals: 'on', showRowTotals: 'on', showColumnTotals: 'on' },
-        configuratorActive: false
+        grid: {
+          type:             'compact',
+          showGrandTotals:  'on',
+          showRowTotals:    'on',
+          showColumnTotals: 'on'
+        }
       }
     };
   }
 
-  // Render one pivot
-  function fmPivot(divId, data, rows, cols, vals, filters) {
-    new flexmonster({
-      container: divId,
-      licenseKey: fmLicense,
-      toolbar: true,
-      report: fmReport(data, rows, cols, vals, filters)
+  // ── Helper: create one Flexmonster instance ───────────────────────────────
+  function fmPivot(divId, data, mapping, rows, cols, vals, filters) {
+    new Flexmonster({
+      container:  '#' + divId,
+      toolbar:    true,
+      report:     fmReport(data, mapping, rows, cols, vals, filters)
     });
   }
 
-  // ── Weekly Chart ───────────────────────────────────────────────────────────
+  // ── Weekly Chart ──────────────────────────────────────────────────────────
   function drawWeeklyChart() {
     const weekly = {};
     dataY2026.forEach(r => {
       const w = String(r['Week'] || '');
-      weekly[w] = (weekly[w] || 0) + (r['Actual TEU'] || 0);
+      if (w) weekly[w] = (weekly[w] || 0) + (Number(r['Actual TEU']) || 0);
     });
     const sorted = Object.entries(weekly).sort(
       (a, b) => parseInt(a[0].replace(/\D/g, '')) - parseInt(b[0].replace(/\D/g, ''))
@@ -239,7 +244,7 @@ function initDashboard() {
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: ctx => ctx.parsed.y.toLocaleString() + ' TEU' } }
+          tooltip: { callbacks: { label: c => c.parsed.y.toLocaleString() + ' TEU' } }
         },
         scales: {
           y: { beginAtZero: true, title: { display: true, text: 'Actual TEU' } },
@@ -249,28 +254,41 @@ function initDashboard() {
     });
   }
 
-  // ── Init all tabs ──────────────────────────────────────────────────────────
-  fmPivot('pivot-port-month', dataY2026,
+  // ── Init all tabs ─────────────────────────────────────────────────────────
+  // Tab 1: Port × Month — Row:Port, Col:ATD Month, Val:Actual TEU, Filter:ATD_Year
+  fmPivot('pivot-port-month', dataY2026, baseMapping,
     ['Port'], ['ATD Month'], ['Actual TEU'], ['ATD_Year']);
 
-  fmPivot('pivot-lane-month', dataY2026,
+  // Tab 2: Lane × Month — Row:Lane, Col:ATD Month, Val:Actual TEU, Filter:ATD_Year
+  fmPivot('pivot-lane-month', dataY2026, baseMapping,
     ['Lane'], ['ATD Month'], ['Actual TEU'], ['ATD_Year']);
 
-  fmPivot('pivot-port-lane-type', dataY2026,
+  // Tab 3: Port × Lane × Type
+  //   Row: Port, Lane
+  //   Col: TYPE (IN/OUT/T·S IN/T·S OUT), Load Status (Empty/Laden)
+  //   Val: Actual TEU
+  //   Filter: ATD_Year
+  fmPivot('pivot-port-lane-type', dataY2026, baseMapping,
     ['Port', 'Lane'], ['TYPE', 'Load Status'], ['Actual TEU'], ['ATD_Year']);
 
+  // Tab 4: Weekly Trend — Chart + Table
   drawWeeklyChart();
-  fmPivot('pivot-weekly-trend', dataY2026,
+  fmPivot('pivot-weekly-trend', dataY2026, baseMapping,
     ['Week'], [], ['Actual TEU'], ['ATD_Year']);
 
-  fmPivot('pivot-booking-actual', dataY2026,
+  // Tab 5: Booking vs Actual — Row:Port, Val:Booking TEU + Actual TEU + Fulfill Rate
+  fmPivot('pivot-booking-actual', dataY2026, baseMapping,
     ['Port'], [], ['Booking TEU', 'Actual TEU', 'Fulfill Rate'], ['ATD_Year']);
 
-  fmPivot('pivot-outbound', dataOB,
-    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
+  // Tab 6: Outbound — Row:Port, Col:ATD_Year+ATD Month, Val:Actual TEU+VS LY+VS LM
+  fmPivot('pivot-outbound', dataOB, obibMapping,
+    ['Port'], ['ATD_Year', 'ATD Month'],
+    ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
 
-  fmPivot('pivot-inbound', dataIB,
-    ['Port'], ['ATD_Year', 'ATD Month'], ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
+  // Tab 7: Inbound — same as Outbound but IB data
+  fmPivot('pivot-inbound', dataIB, obibMapping,
+    ['Port'], ['ATD_Year', 'ATD Month'],
+    ['Actual TEU', 'VS. Last Year', 'VS. Last Month'], []);
 }
 </script>
 </body>
