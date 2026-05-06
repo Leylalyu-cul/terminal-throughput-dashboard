@@ -108,14 +108,26 @@ const BASE_MAPPING = {
   'Fulfill Rate':{ type: 'number' }
 };
 
-// OB/IB extended mapping (has computed fields)
+// OB/IB extended mapping (computed fields added)
 const OBIB_MAPPING = Object.assign({}, BASE_MAPPING, {
-  'Year':        { type: 'string' },
-  'VS LY':       { type: 'number' },
-  'VS LM':       { type: 'number' },
-  'VS Last Year':{ type: 'number' },
-  'VS Last Month':{ type: 'number' }
+  'Year':           { type: 'string' },
+  'VS LY':          { type: 'number' },
+  'VS LM':          { type: 'number' },
+  'VS Last Year':   { type: 'number' },
+  'VS Last Month':  { type: 'number' }
 });
+// ES5 fallback for Object.assign
+if (typeof Object.assign !== 'function') {
+  Object.assign = function(target) {
+    var sources = Array.prototype.slice.call(arguments, 1);
+    sources.forEach(function(src) {
+      if (src) {
+        Object.keys(src).forEach(function(k) { target[k] = src[k]; });
+      }
+    });
+    return target;
+  };
+}
 
 fetch('data/pivot_data.zip')
   .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ': pivot_data.zip not found'); return r.arrayBuffer(); })
@@ -201,8 +213,7 @@ function makeFlexmonster(divId, data, mapping, slice) {
     options: {
       toolbar: true,
       showGrandTotals: 'on',
-      showRowTotals: 'on',
-      showColumnTotals: 'on'
+      showRowTotals: 'on'
     }
   });
 
