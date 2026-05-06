@@ -408,13 +408,12 @@ function makeGrid(containerId, colDefs, rowData) {
       resizable: true,
       minWidth: 80
     },
-    autoSizeStrategy: { type: 'fitCellContents' },
     animateRows: true,
     suppressMovableColumns: false,
     onGridReady: () => {}
   };
   const gridDiv = document.getElementById(containerId);
-  gridInstances[containerId] = agGrid.createGrid(gridDiv, opts);
+  new agGrid.Grid(gridDiv, opts);
 }
 
 function numColDef(field, headerName) {
