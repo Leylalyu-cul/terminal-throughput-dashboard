@@ -393,12 +393,10 @@ function esc(v) { return String(v ?? '').replace(/‖/g, ' '); }
 // ════════════════════════════════════════════════════════════════
 //  GRID FACTORY
 // ════════════════════════════════════════════════════════════════
-const gridInstances = {};
-
 function makeGrid(containerId, colDefs, rowData) {
-  if (gridInstances[containerId]) {
-    gridInstances[containerId].destroy();
-  }
+  const gridDiv = document.getElementById(containerId);
+  // Clear any existing grid content (v30 has no destroy() API)
+  gridDiv.innerHTML = '';
   const opts = {
     columnDefs: colDefs,
     rowData: rowData,
@@ -409,10 +407,8 @@ function makeGrid(containerId, colDefs, rowData) {
       minWidth: 80
     },
     animateRows: true,
-    suppressMovableColumns: false,
-    onGridReady: () => {}
+    suppressMovableColumns: false
   };
-  const gridDiv = document.getElementById(containerId);
   new agGrid.Grid(gridDiv, opts);
 }
 
@@ -437,11 +433,12 @@ const ALL_FIELDS = [
   'Actual TEU', 'Booking TEU', 'Fulfill Rate'
 ];
 
+// Each tab has its own zone state
 const ZONE_FIELDS = {
-  rows:    [],
-  cols:    [],
-  filters: [],
-  vals:    []
+  'port-month':      { rows: [], cols: [], filters: [], vals: [] },
+  'lane-month':      { rows: [], cols: [], filters: [], vals: [] },
+  'port-lane-type':  { rows: [], cols: [], filters: [], vals: [] },
+  'booking-actual':  { rows: [], cols: [], filters: [], vals: [] }
 };
 
 function chipClass(f) { return NUM_FIELDS.has(f) ? 'num-val' : 'str-dim'; }
@@ -465,27 +462,28 @@ function makeChip(f, tabId, zone) {
 }
 
 function removeField(tabId, zone, f) {
-  ZONE_FIELDS[zone] = ZONE_FIELDS[zone].filter(x => x !== f);
+  const zf = ZONE_FIELDS[tabId];
+  zf[zone] = zf[zone].filter(x => x !== f);
   renderPivotUI(tabId);
-  // auto-apply
   const state = getZoneState(tabId);
   if (state.vals.length) applyPivot(tabId, state);
 }
 
 function addField(tabId, zone, f) {
-  // remove from all zones first
+  const zf = ZONE_FIELDS[tabId];
   ['rows','cols','filters','vals'].forEach(z => {
-    ZONE_FIELDS[z] = ZONE_FIELDS[z].filter(x => x !== f);
+    zf[z] = zf[z].filter(x => x !== f);
   });
-  ZONE_FIELDS[zone].push(f);
+  zf[zone].push(f);
   renderPivotUI(tabId);
   const state = getZoneState(tabId);
   if (state.vals.length) applyPivot(tabId, state);
 }
 
 function renderPivotUI(tabId) {
+  const zf = ZONE_FIELDS[tabId];
   const allFields = [...ALL_FIELDS];
-  const used = new Set(['rows','cols','filters','vals'].flatMap(z => ZONE_FIELDS[z]));
+  const used = new Set(['rows','cols','filters','vals'].flatMap(z => zf[z]));
 
   // field list
   const fl = document.getElementById('fl-' + tabId);
@@ -511,7 +509,7 @@ function renderPivotUI(tabId) {
     const zEl = document.getElementById('pz-' + tabId + '-' + zone);
     const container = zEl.querySelector('.pivot-zone-fields');
     container.innerHTML = '';
-    ZONE_FIELDS[zone].forEach(f => container.appendChild(makeChip(f, tabId, zone)));
+    zf[zone].forEach(f => container.appendChild(makeChip(f, tabId, zone)));
   });
 }
 
@@ -542,11 +540,12 @@ function initPivotZones(tabId) {
 }
 
 function getZoneState(tabId) {
+  const zf = ZONE_FIELDS[tabId];
   return {
-    rows:    [...ZONE_FIELDS.rows],
-    cols:    [...ZONE_FIELDS.cols],
-    vals:    [...ZONE_FIELDS.vals],
-    filters: { ...ZONE_FIELDS.filters }
+    rows:    [...(zf.rows || [])],
+    cols:    [...(zf.cols || [])],
+    vals:    [...(zf.vals || [])],
+    filters: { ...(zf.filters || {}) }
   };
 }
 
@@ -616,8 +615,9 @@ function drawWeeklyTab(data) {
     weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
     weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
     weekly[w].count++;
+    weekly[w]['Fulfill Rate'] = weekly[w]['Booking TEU'] > 0 ? weekly[w]['Actual TEU'] / weekly[w]['Booking TEU'] : 0;
   });
-  weekly[w] && (weekly[w]['Fulfill Rate'] = weekly[w]['Booking TEU'] > 0 ? weekly[w]['Actual TEU'] / weekly[w]['Booking TEU'] : 0);
+  });
 
   const rows = Object.entries(weekly)
     .map(([w, v]) => ({ Week: w, 'Actual TEU': v['Actual TEU'], 'Booking TEU': v['Booking TEU'], 'Fulfill Rate': v['Fulfill Rate'] }))
@@ -710,20 +710,19 @@ function initDashboard() {
 
   // ── Tab 1: Port × Month ──────────────────────────────────
   initPivotZones('port-month');
-  // Default preset
-  ZONE_FIELDS.rows = ['Port']; ZONE_FIELDS.cols = ['ATD Month']; ZONE_FIELDS.vals = ['Actual TEU']; ZONE_FIELDS.filters = [];
+  ZONE_FIELDS['port-month'] = { rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'], filters: {} };
   renderPivotUI('port-month');
   applyPivot('port-month', getZoneState('port-month'));
 
   // ── Tab 2: Lane × Month ──────────────────────────────────
   initPivotZones('lane-month');
-  ZONE_FIELDS.rows = ['Lane']; ZONE_FIELDS.cols = ['ATD Month']; ZONE_FIELDS.vals = ['Actual TEU']; ZONE_FIELDS.filters = [];
+  ZONE_FIELDS['lane-month'] = { rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'], filters: {} };
   renderPivotUI('lane-month');
   applyPivot('lane-month', getZoneState('lane-month'));
 
   // ── Tab 3: Port × Lane × Type ────────────────────────────
   initPivotZones('port-lane-type');
-  ZONE_FIELDS.rows = ['Port', 'Lane']; ZONE_FIELDS.cols = ['TYPE', 'Load Status']; ZONE_FIELDS.vals = ['Actual TEU']; ZONE_FIELDS.filters = [];
+  ZONE_FIELDS['port-lane-type'] = { rows: ['Port', 'Lane'], cols: ['TYPE', 'Load Status'], vals: ['Actual TEU'], filters: {} };
   renderPivotUI('port-lane-type');
   applyPivot('port-lane-type', getZoneState('port-lane-type'));
 
@@ -732,7 +731,7 @@ function initDashboard() {
 
   // ── Tab 5: Booking vs Actual ────────────────────────────
   initPivotZones('booking-actual');
-  ZONE_FIELDS.rows = ['Port']; ZONE_FIELDS.cols = []; ZONE_FIELDS.vals = ['Booking TEU', 'Actual TEU']; ZONE_FIELDS.filters = [];
+  ZONE_FIELDS['booking-actual'] = { rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU'], filters: {} };
   renderPivotUI('booking-actual');
   applyPivot('booking-actual', getZoneState('booking-actual'));
 
