@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.flexmonster.com/2.9.4/flexmonster.min.css">
+  <link rel="stylesheet" href="https://cdn.flexmonster.com/flexmonster.min.css">
   <style>
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
@@ -82,7 +82,7 @@
 <!-- Chart.js -->
 <script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Flexmonster -->
-<script src="https://cdn.flexmonster.com/2.9.4/flexmonster.js"></script>
+<script src="https://cdn.flexmonster.com/flexmonster.js"></script>
 
 <script>
 'use strict';
@@ -203,9 +203,10 @@ function initDashboard() {
   // ── Helper: create one Flexmonster instance ───────────────────────────────
   function fmPivot(divId, data, mapping, rows, cols, vals, filters) {
     new Flexmonster({
-      container:  '#' + divId,
-      toolbar:    true,
-      report:     fmReport(data, mapping, rows, cols, vals, filters)
+      container:       '#' + divId,
+      componentFolder: 'https://cdn.flexmonster.com/',
+      toolbar:         true,
+      report:          fmReport(data, mapping, rows, cols, vals, filters)
     });
   }
 
