@@ -5,134 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@30.0.6/styles/ag-grid.css">
-  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@30.0.6/styles/ag-theme-balham.css">
+  <!-- Flexmonster CSS -->
+  <link rel="stylesheet" href="https://cdn.flexmonster.com/theme/light/flexmonster.min.css">
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
-
-    /* ── PIVOT BUILDER ─────────────────────────── */
-    .pivot-builder {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 14px;
-      align-items: flex-start;
-    }
-    .pivot-zone {
-      background: #fff;
-      border: 2px solid #dee2e6;
-      border-radius: 8px;
-      min-width: 130px;
-      max-width: 160px;
-      min-height: 90px;
-      flex: 1;
-      padding: 8px;
-      transition: border-color .2s, background .2s;
-    }
-    .pivot-zone.drag-over {
-      border-color: #2c5aa0;
-      background: #eef4ff;
-    }
-    .pivot-zone-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #666;
-      margin-bottom: 6px;
-      letter-spacing: .5px;
-    }
-    .pivot-zone-fields {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      min-height: 32px;
-    }
-    .field-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 8px;
-      border-radius: 14px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: grab;
-      user-select: none;
-      border: 1px solid transparent;
-      transition: all .15s;
-    }
-    .field-chip:hover { opacity: .8; transform: scale(1.03); }
-    .field-chip:active { cursor: grabbing; }
-    .field-chip.str-dim  { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
-    .field-chip.num-val  { background: #dcfce7; color: #15803d; border-color: #86efac; }
-    .field-chip .remove {
-      font-size: 14px;
-      line-height: 1;
-      color: inherit;
-      opacity: .6;
-      cursor: pointer;
-      margin-left: 2px;
-    }
-    .field-chip .remove:hover { opacity: 1; }
-
-    .field-list-panel {
-      background: #fff;
-      border: 2px solid #dee2e6;
-      border-radius: 8px;
-      min-width: 150px;
-      padding: 8px;
-    }
-    .field-list-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #666;
-      margin-bottom: 6px;
-      letter-spacing: .5px;
-    }
-    .field-list-items { display: flex; flex-wrap: wrap; gap: 4px; }
-
-    /* ── PIVOT LEGEND ──────────────────────────── */
-    .pivot-legend {
-      font-size: 12px;
-      color: #888;
-      margin-bottom: 8px;
-    }
-
-    /* ── GRID ──────────────────────────────────── */
-    #grid-port-month, #grid-lane-month, #grid-port-lane-type,
-    #grid-booking-actual, #grid-weekly {
-      width: 100%;
-    }
-
-    /* ── OB/IB SECTION ────────────────────────── */
-    .obib-section {
-      background: #fff;
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    .obib-section h6 { font-weight: 600; color: #333; margin-bottom: 10px; }
-
-    /* ── MISC ──────────────────────────────────── */
-    .tab-content { background: #fff; border: 1px solid #dee2e6; border-top: none; padding: 16px; }
-    #chart-weekly-wrap { width: 100%; height: 280px; margin-bottom: 16px; }
-    .error-msg { color: #dc3545; font-size: 16px; padding: 20px; text-align: center; }
-    .loading   { text-align: center; padding: 60px; color: #666; font-size: 16px; }
-    .ag-row-port-total { background: #e8f0fe !important; font-weight: 700; }
-    .ag-row-subtotal    { background: #f0f7ff !important; font-style: italic; }
-    .tab-pane { min-height: 600px; }
+    .tab-pane { min-height: 700px; padding: 16px; }
+    .tab-content { border: 1px solid #dee2e6; border-top: none; background: #fff; }
+    .fm-wrap { width: 100%; height: 600px; }
+    #tab-weekly-trend .chart-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
+    .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
-
-    /* aggregate bar */
-    .agg-bar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 8px;
-      font-size: 13px;
-    }
-    .agg-bar label { font-weight: 600; color: #555; margin: 0; }
-    .agg-bar select { font-size: 13px; padding: 2px 6px; }
   </style>
 </head>
 <body>
@@ -144,96 +27,48 @@
     <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-port-month">Port x Month</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-lane-month">Lane x Month</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-port-lane-type">Port x Lane x Type</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">Weekly Trend</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-booking-actual">Booking vs Actual</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">Weekly Trend</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-outbound">Outbound Report</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-inbound">Inbound Report</a></li>
   </ul>
 
-  <div class="tab-content" id="mainTabContent">
+  <div class="tab-content">
 
-    <!-- ══ Tab 1: Port × Month ══════════════════════════════════════════ -->
+    <!-- Tab 1: Port x Month -->
     <div class="tab-pane fade show active" id="tab-port-month">
-      <div class="pivot-legend">拖拽字段到 Rows / Columns / Filters 区域，点击 Apply 应用透视</div>
-      <div class="pivot-builder" id="pb-port-month">
-        <div class="field-list-panel" id="fl-port-month"></div>
-        <div class="pivot-zone" data-zone="rows"    id="pz-port-month-rows"><div class="pivot-zone-label">Rows</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="cols"    id="pz-port-month-cols"><div class="pivot-zone-label">Columns</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="filters" id="pz-port-month-filters"><div class="pivot-zone-label">Filters</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="vals"    id="pz-port-month-vals"><div class="pivot-zone-label">Values</div><div class="pivot-zone-fields"></div></div>
-      </div>
-      <div class="agg-bar" id="agg-port-month">
-        <label>聚合方式:</label>
-        <select id="aggfn-port-month"><option value="sum">Sum</option><option value="avg">Average</option><option value="count">Count</option></select>
-      </div>
-      <div id="grid-port-month" class="ag-theme-balham" style="height:520px"></div>
+      <div id="fm-port-month" class="fm-wrap"></div>
     </div>
 
-    <!-- ══ Tab 2: Lane × Month ═══════════════════════════════════════════ -->
+    <!-- Tab 2: Lane x Month -->
     <div class="tab-pane fade" id="tab-lane-month">
-      <div class="pivot-legend">拖拽字段到 Rows / Columns / Filters 区域，点击 Apply 应用透视</div>
-      <div class="pivot-builder" id="pb-lane-month">
-        <div class="field-list-panel" id="fl-lane-month"></div>
-        <div class="pivot-zone" data-zone="rows"    id="pz-lane-month-rows"><div class="pivot-zone-label">Rows</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="cols"    id="pz-lane-month-cols"><div class="pivot-zone-label">Columns</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="filters" id="pz-lane-month-filters"><div class="pivot-zone-label">Filters</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="vals"    id="pz-lane-month-vals"><div class="pivot-zone-label">Values</div><div class="pivot-zone-fields"></div></div>
-      </div>
-      <div class="agg-bar" id="agg-lane-month">
-        <label>聚合方式:</label>
-        <select id="aggfn-lane-month"><option value="sum">Sum</option><option value="avg">Average</option><option value="count">Count</option></select>
-      </div>
-      <div id="grid-lane-month" class="ag-theme-balham" style="height:520px"></div>
+      <div id="fm-lane-month" class="fm-wrap"></div>
     </div>
 
-    <!-- ══ Tab 3: Port × Lane × Type ════════════════════════════════════ -->
+    <!-- Tab 3: Port x Lane x Type -->
     <div class="tab-pane fade" id="tab-port-lane-type">
-      <div class="pivot-legend">拖拽字段到 Rows / Columns / Filters 区域，点击 Apply 应用透视</div>
-      <div class="pivot-builder" id="pb-port-lane-type">
-        <div class="field-list-panel" id="fl-port-lane-type"></div>
-        <div class="pivot-zone" data-zone="rows"    id="pz-port-lane-type-rows"><div class="pivot-zone-label">Rows</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="cols"    id="pz-port-lane-type-cols"><div class="pivot-zone-label">Columns</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="filters" id="pz-port-lane-type-filters"><div class="pivot-zone-label">Filters</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="vals"    id="pz-port-lane-type-vals"><div class="pivot-zone-label">Values</div><div class="pivot-zone-fields"></div></div>
-      </div>
-      <div class="agg-bar" id="agg-port-lane-type">
-        <label>聚合方式:</label>
-        <select id="aggfn-port-lane-type"><option value="sum">Sum</option><option value="avg">Average</option><option value="count">Count</option></select>
-      </div>
-      <div id="grid-port-lane-type" class="ag-theme-balham" style="height:520px"></div>
+      <div id="fm-port-lane-type" class="fm-wrap"></div>
     </div>
 
-    <!-- ══ Tab 4: Weekly Trend ═══════════════════════════════════════════ -->
-    <div class="tab-pane fade" id="tab-weekly-trend">
-      <div id="chart-weekly-wrap"><canvas id="chart-weekly-canvas"></canvas></div>
-      <div id="grid-weekly" class="ag-theme-balham" style="height:380px"></div>
-    </div>
-
-    <!-- ══ Tab 5: Booking vs Actual ═══════════════════════════════════════ -->
+    <!-- Tab 4: Booking vs Actual -->
     <div class="tab-pane fade" id="tab-booking-actual">
-      <div class="pivot-legend">拖拽字段到 Rows / Columns / Filters 区域，点击 Apply 应用透视</div>
-      <div class="pivot-builder" id="pb-booking-actual">
-        <div class="field-list-panel" id="fl-booking-actual"></div>
-        <div class="pivot-zone" data-zone="rows"    id="pz-booking-actual-rows"><div class="pivot-zone-label">Rows</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="cols"    id="pz-booking-actual-cols"><div class="pivot-zone-label">Columns</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="filters" id="pz-booking-actual-filters"><div class="pivot-zone-label">Filters</div><div class="pivot-zone-fields"></div></div>
-        <div class="pivot-zone" data-zone="vals"    id="pz-booking-actual-vals"><div class="pivot-zone-label">Values</div><div class="pivot-zone-fields"></div></div>
-      </div>
-      <div class="agg-bar" id="agg-booking-actual">
-        <label>聚合方式:</label>
-        <select id="aggfn-booking-actual"><option value="sum">Sum</option><option value="avg">Average</option><option value="count">Count</option></select>
-      </div>
-      <div id="grid-booking-actual" class="ag-theme-balham" style="height:520px"></div>
+      <div id="fm-booking-actual" class="fm-wrap"></div>
     </div>
 
-    <!-- ══ Tab 6: Outbound ════════════════════════════════════════════════ -->
+    <!-- Tab 5: Weekly Trend -->
+    <div class="tab-pane fade" id="tab-weekly-trend">
+      <div class="chart-wrap"><canvas id="chart-weekly-canvas"></canvas></div>
+      <div id="fm-weekly" class="fm-wrap"></div>
+    </div>
+
+    <!-- Tab 6: Outbound -->
     <div class="tab-pane fade" id="tab-outbound">
-      <div id="ob-report"></div>
+      <div id="fm-outbound" class="fm-wrap"></div>
     </div>
 
-    <!-- ══ Tab 7: Inbound ═════════════════════════════════════════════════ -->
+    <!-- Tab 7: Inbound -->
     <div class="tab-pane fade" id="tab-inbound">
-      <div id="ib-report"></div>
+      <div id="fm-inbound" class="fm-wrap"></div>
     </div>
 
   </div><!-- /tab-content -->
@@ -245,8 +80,8 @@
 <script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js"></script>
 <!-- JSZip -->
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
-<!-- AG Grid v30 UMD (jsdelivr, exposes window.agGrid) -->
-<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@30.0.6/dist/ag-grid-community.min.js"></script>
+<!-- Flexmonster (no version number = official recommended path) -->
+<script src="https://cdn.flexmonster.com/flexmonster.js"></script>
 
 <script>
 'use strict';
@@ -256,6 +91,31 @@
 // ════════════════════════════════════════════════════════════════
 let rawData = [];
 let weeklyChart = null;
+let fmInstances = {}; // tabId -> Flexmonster instance
+
+// Base field mapping (same for all raw-data tabs)
+const BASE_MAPPING = {
+  'Port':        { type: 'string' },
+  'Lane':        { type: 'string' },
+  'TYPE':        { type: 'string' },
+  'Load Status': { type: 'string' },
+  'ATD_Year':    { type: 'string' },
+  'ATD Month':   { type: 'string' },
+  'Week':        { type: 'string' },
+  'COC-SOC':     { type: 'string' },
+  'Actual TEU':  { type: 'number' },
+  'Booking TEU': { type: 'number' },
+  'Fulfill Rate':{ type: 'number' }
+};
+
+// OB/IB extended mapping (has computed fields)
+const OBIB_MAPPING = Object.assign({}, BASE_MAPPING, {
+  'Year':        { type: 'string' },
+  'VS LY':       { type: 'number' },
+  'VS LM':       { type: 'number' },
+  'VS Last Year':{ type: 'number' },
+  'VS Last Month':{ type: 'number' }
+});
 
 fetch('data/pivot_data.zip')
   .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ': pivot_data.zip not found'); return r.arrayBuffer(); })
@@ -271,20 +131,13 @@ fetch('data/pivot_data.zip')
     initDashboard();
   })
   .catch(err => {
-    document.body.innerHTML += '<div class="error-msg">Failed to load data: ' + err.message + '</div>';
+    document.body.innerHTML += '<div class="loading" style="color:#dc3545">Failed to load data: ' + err.message + '</div>';
   });
 
 
 // ════════════════════════════════════════════════════════════════
 //  HELPERS
 // ════════════════════════════════════════════════════════════════
-const NUM_FIELDS = new Set(['Actual TEU', 'Booking TEU', 'Fulfill Rate', 'VS. Last Year', 'VS. Last Month', 'VS LY', 'VS LM']);
-
-function fmtNum(v) {
-  if (v == null || isNaN(v)) return '';
-  return Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
-}
-
 function prevYear(yr) {
   const y = parseInt(yr);
   return isNaN(y) ? '' : String(y - 1);
@@ -316,385 +169,45 @@ function buildYoYMoM(baseData, groupFields) {
     const lmKey = [r.ATD_Year, prevMonth(r['ATD Month'])].join('|');
     r['VS LY'] = r['Actual TEU'] - (valMap[lyKey] || 0);
     r['VS LM'] = r['Actual TEU'] - (valMap[lmKey] || 0);
+    r['Year'] = r['ATD_Year'];
+    r['VS Last Year'] = r['VS LY'];
+    r['VS Last Month'] = r['VS LM'];
     return r;
   });
 }
 
 
 // ════════════════════════════════════════════════════════════════
-//  PIVOT ENGINE
+//  FLEXMONSTER FACTORY
 // ════════════════════════════════════════════════════════════════
-function buildAgg(raw, { rows = [], cols = [], vals = [], filters = {}, aggFn = 'sum' }) {
-  // 1. apply filters
-  let data = raw.filter(r => {
-    for (const [f, allowed] of Object.entries(filters)) {
-      if (!allowed || allowed.length === 0) continue;
-      const v = String(r[f] ?? '');
-      if (!allowed.includes(v)) return false;
-    }
-    return true;
-  });
+function makeFlexmonster(divId, data, mapping, slice) {
+  const container = document.getElementById(divId);
+  container.innerHTML = ''; // clear previous
 
-  // 2. build group keys
-  const keyMap = {};
-  data.forEach(r => {
-    const rowK = rows.map(f => esc(r[f] ?? '')).join('‖');
-    const colK = cols.map(f => esc(r[f] ?? '')).join('‖');
-    const ck  = rowK + '‖‖' + colK;
-    if (!keyMap[ck]) {
-      keyMap[ck] = { _rowKey: rowK, _colKey: colK, _vals: {} };
-      vals.forEach(v => { keyMap[ck]._vals[v] = []; });
-    }
-    vals.forEach(v => { keyMap[ck]._vals[v].push(Number(r[v]) || 0); });
-  });
-
-  // 3. aggregate
-  const results = [];
-  const colKeys  = [...new Set(Object.values(keyMap).map(x => x._colKey))].sort();
-
-  Object.values(keyMap).forEach(cell => {
-    const row = {};
-    // expand row-key fields
-    if (rows.length === 0) row['_rowLabel'] = '(Total)';
-    else {
-      const rowParts = cell._rowKey.split('‖');
-      rows.forEach((f, i) => { row[f] = rowParts[i] || ''; });
-    }
-    // expand col-key fields
-    if (cols.length > 0) {
-      const colParts = cell._colKey.split('‖');
-      cols.forEach((f, i) => { row[f] = colParts[i] || ''; });
-    }
-    // aggregate values
-    vals.forEach(v => {
-      const nums = cell._vals[v];
-      if (nums.length === 0) { row[v] = 0; return; }
-      switch (aggFn) {
-        case 'avg':   row[v] = nums.reduce((a, b) => a + b, 0) / nums.length; break;
-        case 'count': row[v] = nums.length; break;
-        default:      row[v] = nums.reduce((a, b) => a + b, 0); // sum
-      }
-    });
-    results.push(row);
-  });
-
-  // 4. sort
-  if (rows.length > 0) {
-    const firstRowField = rows[0];
-    results.sort((a, b) => String(a[firstRowField] || '').localeCompare(String(b[firstRowField] || '')));
+  // Destroy old instance if any
+  if (fmInstances[divId]) {
+    try { fmInstances[divId].dispose(); } catch(e) {}
+    fmInstances[divId] = null;
   }
 
-  return { results, colKeys, cols };
-}
-
-function esc(v) { return String(v ?? '').replace(/‖/g, ' '); }
-
-
-// ════════════════════════════════════════════════════════════════
-//  GRID FACTORY
-// ════════════════════════════════════════════════════════════════
-function makeGrid(containerId, colDefs, rowData) {
-  const gridDiv = document.getElementById(containerId);
-  // Clear any existing grid content (v30 has no destroy() API)
-  gridDiv.innerHTML = '';
-  const opts = {
-    columnDefs: colDefs,
-    rowData: rowData,
-    defaultColDef: {
-      sortable: true,
-      filter: true,
-      resizable: true,
-      minWidth: 80
+  const pivot = new Flexmonster({
+    container: '#' + divId,
+    componentFolder: 'https://cdn.flexmonster.com/',
+    dataSource: {
+      data: data,
+      mapping: mapping
     },
-    animateRows: true,
-    suppressMovableColumns: false
-  };
-  new agGrid.Grid(gridDiv, opts);
-}
-
-function numColDef(field, headerName) {
-  return {
-    field,
-    headerName: headerName || field,
-    type: 'numericColumn',
-    valueFormatter: p => fmtNum(p.value),
-    aggFunc: 'sum'
-  };
-}
-
-
-// ════════════════════════════════════════════════════════════════
-//  PIVOT BUILDER UI
-// ════════════════════════════════════════════════════════════════
-const ALL_FIELDS = [
-  'Port', 'Lane', 'TYPE', 'Load Status',
-  'ATD_Year', 'ATD Month', 'Week',
-  'COC-SOC',
-  'Actual TEU', 'Booking TEU', 'Fulfill Rate'
-];
-
-// Each tab has its own zone state
-const ZONE_FIELDS = {
-  'port-month':      { rows: [], cols: [], filters: [], vals: [] },
-  'lane-month':      { rows: [], cols: [], filters: [], vals: [] },
-  'port-lane-type':  { rows: [], cols: [], filters: [], vals: [] },
-  'booking-actual':  { rows: [], cols: [], filters: [], vals: [] }
-};
-
-function chipClass(f) { return NUM_FIELDS.has(f) ? 'num-val' : 'str-dim'; }
-
-function makeChip(f, tabId, zone) {
-  const span = document.createElement('span');
-  span.className = 'field-chip ' + chipClass(f);
-  span.draggable = true;
-  span.dataset.field = f;
-  span.dataset.tabId = tabId;
-  span.innerHTML = f + '<span class="remove" title="remove">×</span>';
-  span.querySelector('.remove').onclick = e => {
-    e.stopPropagation();
-    removeField(tabId, zone, f);
-  };
-  span.ondragstart = e => {
-    e.dataTransfer.setData('text/plain', JSON.stringify({ field: f, from: zone, tabId }));
-    e.dataTransfer.effectAllowed = 'move';
-  };
-  return span;
-}
-
-function removeField(tabId, zone, f) {
-  const zf = ZONE_FIELDS[tabId];
-  zf[zone] = zf[zone].filter(x => x !== f);
-  renderPivotUI(tabId);
-  const state = getZoneState(tabId);
-  if (state.vals.length) applyPivot(tabId, state);
-}
-
-function addField(tabId, zone, f) {
-  const zf = ZONE_FIELDS[tabId];
-  ['rows','cols','filters','vals'].forEach(z => {
-    zf[z] = zf[z].filter(x => x !== f);
-  });
-  zf[zone].push(f);
-  renderPivotUI(tabId);
-  const state = getZoneState(tabId);
-  if (state.vals.length) applyPivot(tabId, state);
-}
-
-function renderPivotUI(tabId) {
-  const zf = ZONE_FIELDS[tabId];
-  const allFields = [...ALL_FIELDS];
-  const used = new Set(['rows','cols','filters','vals'].flatMap(z => zf[z]));
-
-  // field list
-  const fl = document.getElementById('fl-' + tabId);
-  fl.innerHTML = '<div class="field-list-label">All Fields</div><div class="field-list-items" id="fli-' + tabId + '"></div>';
-  const fli = document.getElementById('fli-' + tabId);
-  allFields.forEach(f => {
-    if (used.has(f)) return;
-    const chip = document.createElement('span');
-    chip.className = 'field-chip ' + chipClass(f);
-    chip.draggable = true;
-    chip.dataset.field = f;
-    chip.dataset.tabId = tabId;
-    chip.textContent = f;
-    chip.ondragstart = e => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ field: f, from: 'list', tabId }));
-      e.dataTransfer.effectAllowed = 'copy';
-    };
-    fli.appendChild(chip);
-  });
-
-  // zone chips
-  ['rows','cols','filters','vals'].forEach(zone => {
-    const zEl = document.getElementById('pz-' + tabId + '-' + zone);
-    const container = zEl.querySelector('.pivot-zone-fields');
-    container.innerHTML = '';
-    zf[zone].forEach(f => container.appendChild(makeChip(f, tabId, zone)));
-  });
-}
-
-function initPivotZones(tabId) {
-  ['rows','cols','filters','vals'].forEach(zone => {
-    const zEl = document.getElementById('pz-' + tabId + '-' + zone);
-    zEl.ondragover = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; zEl.classList.add('drag-over'); };
-    zEl.ondragleave = () => zEl.classList.remove('drag-over');
-    zEl.ondrop = e => {
-      e.preventDefault();
-      zEl.classList.remove('drag-over');
-      const raw = e.dataTransfer.getData('text/plain');
-      if (!raw) return;
-      const { field, from } = JSON.parse(raw);
-      if (from === 'list' || from === zone) {
-        addField(tabId, zone, field);
-        const state = getZoneState(tabId);
-        if (state.vals.length) applyPivot(tabId, state);
-      } else {
-        // move from another zone
-        removeField(tabId, from, field);
-        addField(tabId, zone, field);
-        const state = getZoneState(tabId);
-        if (state.vals.length) applyPivot(tabId, state);
-      }
-    };
-  });
-}
-
-function getZoneState(tabId) {
-  const zf = ZONE_FIELDS[tabId];
-  return {
-    rows:    [...(zf.rows || [])],
-    cols:    [...(zf.cols || [])],
-    vals:    [...(zf.vals || [])],
-    filters: { ...(zf.filters || {}) }
-  };
-}
-
-
-// ════════════════════════════════════════════════════════════════
-//  APPLY PIVOT
-// ════════════════════════════════════════════════════════════════
-function applyPivot(tabId, state) {
-  const aggFn = document.getElementById('aggfn-' + tabId)?.value || 'sum';
-  const dataSrc = (tabId === 'outbound') ? obData : (tabId === 'inbound') ? ibData : rawData;
-  const { results, colKeys, cols } = buildAgg(dataSrc, { ...state, aggFn });
-
-  // Build col defs
-  const colDefs = [];
-  const rowFields = state.rows.length ? state.rows : ['_rowLabel'];
-  rowFields.forEach(f => {
-    colDefs.push({ field: f, headerName: f === '_rowLabel' ? '' : f, sortable: true, filter: true, minWidth: 100, rowGroup: false });
-  });
-  cols.forEach((f, ci) => {
-    const colLabel = colKeys[ci] || '(blank)';
-    // One sub-col per value
-    state.vals.forEach(v => {
-      const label = cols.length > 0 ? colLabel + ' – ' + v : v;
-      colDefs.push({
-        field: '__' + ci + '_' + v,
-        headerName: label,
-        type: 'numericColumn',
-        valueFormatter: p => fmtNum(p.value),
-        sortable: true
-      });
-    });
-  });
-
-  // Build row data with pivot columns
-  const pivotRowData = {};
-  results.forEach(r => {
-    const rowKey = rowFields.map(f => r[f] || '').join('‖');
-    if (!pivotRowData[rowKey]) {
-      pivotRowData[rowKey] = {};
-      rowFields.forEach(f => { pivotRowData[rowKey][f] = r[f] || ''; });
-    }
-    const colKey = cols.map(f => r[f] || '').join('‖');
-    const ci = colKeys.indexOf(colKey);
-    if (ci >= 0) {
-      state.vals.forEach(v => {
-        pivotRowData[rowKey]['__' + ci + '_' + v] = r[v];
-      });
-    }
-  });
-
-  const finalRowData = Object.values(pivotRowData);
-  makeGrid('grid-' + tabId, colDefs, finalRowData);
-}
-
-
-// ════════════════════════════════════════════════════════════════
-//  PRESET PIVOTS  (pre-configured, not draggable per tab)
-// ════════════════════════════════════════════════════════════════
-
-// ── Weekly Trend: AG Grid (pre-sorted by week) ──────────────
-function drawWeeklyTab(data) {
-  const weekly = {};
-  data.forEach(r => {
-    const w = String(r['Week'] || '');
-    if (!w) return;
-    if (!weekly[w]) weekly[w] = { 'Actual TEU': 0, 'Booking TEU': 0, 'Fulfill Rate': 0, count: 0 };
-    weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
-    weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
-    weekly[w].count++;
-    weekly[w]['Fulfill Rate'] = weekly[w]['Booking TEU'] > 0 ? weekly[w]['Actual TEU'] / weekly[w]['Booking TEU'] : 0;
-  });
-  });
-
-  const rows = Object.entries(weekly)
-    .map(([w, v]) => ({ Week: w, 'Actual TEU': v['Actual TEU'], 'Booking TEU': v['Booking TEU'], 'Fulfill Rate': v['Fulfill Rate'] }))
-    .sort((a, b) => parseInt((a.Week||'').replace(/\D/g,'')) - parseInt((b.Week||'').replace(/\D/g,'')));
-
-  const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
-  const labels = rows.map(r => r.Week);
-  if (weeklyChart) weeklyChart.destroy();
-  weeklyChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Actual TEU',  data: rows.map(r => r['Actual TEU']),  borderColor: '#2c5aa0', backgroundColor: 'rgba(44,90,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 },
-        { label: 'Booking TEU', data: rows.map(r => r['Booking TEU']), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
-      ]
-    },
+    slice: slice,
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: true }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toLocaleString() } } },
-      scales: { y: { beginAtZero: true, title: { display: true, text: 'TEU' } }, x: { title: { display: true, text: 'Week' } } }
+      toolbar: true,
+      showGrandTotals: 'on',
+      showRowTotals: 'on',
+      showColumnTotals: 'on'
     }
   });
 
-  makeGrid('grid-weekly', [
-    { field: 'Week', headerName: 'Week', sortable: true, filter: true, minWidth: 100 },
-    numColDef('Actual TEU', 'Actual TEU'),
-    numColDef('Booking TEU', 'Booking TEU'),
-    { field: 'Fulfill Rate', headerName: 'Fulfill Rate', type: 'numericColumn', valueFormatter: p => p.value ? (p.value * 100).toFixed(1) + '%' : '' }
-  ], rows);
-}
-
-
-// ── OB/IB: Flat grid with YoY/MoM ──────────────────────────
-let obData = [], ibData = [];
-
-function buildOBIBReport(data, typeLabel) {
-  const filtered = data.filter(r => typeLabel.includes(r['TYPE']));
-  const reportData = buildYoYMoM(filtered, ['Port', 'ATD_Year', 'ATD Month']);
-
-  const rows = reportData.map(r => ({
-    Port: r.Port,
-    Year: r.ATD_Year,
-    Month: r['ATD Month'],
-    'Actual TEU': r['Actual TEU'],
-    'VS LY': r['VS LY'],
-    'VS LM': r['VS LM']
-  }));
-
-  return rows;
-}
-
-function renderOBIBGrid(containerId, rows) {
-  makeGrid(containerId, [
-    { field: 'Port', headerName: 'Port', sortable: true, filter: true, minWidth: 100, rowGroup: true },
-    { field: 'Year',  headerName: 'Year',  sortable: true, filter: true, minWidth: 80 },
-    { field: 'Month', headerName: 'Month', sortable: true, filter: true, minWidth: 80 },
-    numColDef('Actual TEU', 'Actual TEU'),
-    {
-      field: 'VS LY', headerName: 'VS LY',
-      type: 'numericColumn',
-      valueFormatter: p => {
-        if (p.value == null) return '';
-        const v = p.value;
-        return (v >= 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-      }
-    },
-    {
-      field: 'VS LM', headerName: 'VS LM',
-      type: 'numericColumn',
-      valueFormatter: p => {
-        if (p.value == null) return '';
-        const v = p.value;
-        return (v >= 0 ? '+' : '') + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-      }
-    }
-  ], rows);
+  fmInstances[divId] = pivot;
+  return pivot;
 }
 
 
@@ -702,51 +215,121 @@ function renderOBIBGrid(containerId, rows) {
 //  INIT DASHBOARD
 // ════════════════════════════════════════════════════════════════
 function initDashboard() {
-  const dataY2026 = rawData.filter(r => String(r['ATD_Year'] || '') === '2026');
 
-  // Pre-compute OB / IB
-  obData = buildYoYMoM(rawData.filter(r => ['OUT', 'T/S OUT'].includes(r['TYPE'])), ['Port', 'ATD_Year', 'ATD Month']);
-  ibData = buildYoYMoM(rawData.filter(r => ['IN',  'T/S IN' ].includes(r['TYPE'])), ['Port', 'ATD_Year', 'ATD Month']);
-
-  // ── Tab 1: Port × Month ──────────────────────────────────
-  initPivotZones('port-month');
-  ZONE_FIELDS['port-month'] = { rows: ['Port'], cols: ['ATD Month'], vals: ['Actual TEU'], filters: {} };
-  renderPivotUI('port-month');
-  applyPivot('port-month', getZoneState('port-month'));
-
-  // ── Tab 2: Lane × Month ──────────────────────────────────
-  initPivotZones('lane-month');
-  ZONE_FIELDS['lane-month'] = { rows: ['Lane'], cols: ['ATD Month'], vals: ['Actual TEU'], filters: {} };
-  renderPivotUI('lane-month');
-  applyPivot('lane-month', getZoneState('lane-month'));
-
-  // ── Tab 3: Port × Lane × Type ────────────────────────────
-  initPivotZones('port-lane-type');
-  ZONE_FIELDS['port-lane-type'] = { rows: ['Port', 'Lane'], cols: ['TYPE', 'Load Status'], vals: ['Actual TEU'], filters: {} };
-  renderPivotUI('port-lane-type');
-  applyPivot('port-lane-type', getZoneState('port-lane-type'));
-
-  // ── Tab 4: Weekly Trend ──────────────────────────────────
-  drawWeeklyTab(dataY2026);
-
-  // ── Tab 5: Booking vs Actual ────────────────────────────
-  initPivotZones('booking-actual');
-  ZONE_FIELDS['booking-actual'] = { rows: ['Port'], cols: [], vals: ['Booking TEU', 'Actual TEU'], filters: {} };
-  renderPivotUI('booking-actual');
-  applyPivot('booking-actual', getZoneState('booking-actual'));
-
-  // ── Tab 6: Outbound ────────────────────────────────────
-  renderOBIBGrid('ob-report', buildOBIBReport(rawData, ['OUT', 'T/S OUT']));
-
-  // ── Tab 7: Inbound ─────────────────────────────────────
-  renderOBIBGrid('ib-report', buildOBIBReport(rawData, ['IN', 'T/S IN']));
-
-  // re-apply pivot when aggFn changes
-  ['port-month','lane-month','port-lane-type','booking-actual'].forEach(tid => {
-    document.getElementById('aggfn-' + tid)?.addEventListener('change', () => {
-      applyPivot(tid, getZoneState(tid));
+  // ── Weekly chart (Chart.js) ───────────────────────────────
+  function drawWeeklyChart() {
+    const weekly = {};
+    rawData.forEach(r => {
+      const w = String(r['Week'] || '');
+      if (!w) return;
+      if (!weekly[w]) weekly[w] = { 'Actual TEU': 0, 'Booking TEU': 0 };
+      weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
+      weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
     });
+    const rows = Object.entries(weekly)
+      .map(([w, v]) => ({ Week: w, 'Actual TEU': v['Actual TEU'], 'Booking TEU': v['Booking TEU'] }))
+      .sort((a, b) => parseInt((a.Week||'').replace(/\D/g,'')) - parseInt((b.Week||'').replace(/\D/g,'')));
+
+    const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
+    if (weeklyChart) weeklyChart.destroy();
+    weeklyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: rows.map(r => r.Week),
+        datasets: [
+          { label: 'Actual TEU',  data: rows.map(r => r['Actual TEU']),  borderColor: '#2c5aa0', backgroundColor: 'rgba(44,90,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 },
+          { label: 'Booking TEU', data: rows.map(r => r['Booking TEU']), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: true }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toLocaleString() } } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: 'TEU' } }, x: { title: { display: true, text: 'Week' } } }
+      }
+    });
+  }
+  drawWeeklyChart();
+
+  // ── Pre-compute OB / IB ───────────────────────────────────
+  const obData = buildYoYMoM(
+    rawData.filter(r => ['OUT', 'T/S OUT'].includes(r['TYPE'])),
+    ['Port', 'ATD_Year', 'ATD Month']
+  );
+  const ibData = buildYoYMoM(
+    rawData.filter(r => ['IN', 'T/S IN'].includes(r['TYPE'])),
+    ['Port', 'ATD_Year', 'ATD Month']
+  );
+
+  // ══ Tab 1: Port x Month ══════════════════════════════════
+  makeFlexmonster('fm-port-month', rawData, BASE_MAPPING, {
+    rows:    ['Port'],
+    columns: ['ATD Month'],
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
+    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
   });
+
+  // ══ Tab 2: Lane x Month ═══════════════════════════════════
+  makeFlexmonster('fm-lane-month', rawData, BASE_MAPPING, {
+    rows:    ['Lane'],
+    columns: ['ATD Month'],
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
+    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+  });
+
+  // ══ Tab 3: Port x Lane x Type ═════════════════════════════
+  makeFlexmonster('fm-port-lane-type', rawData, BASE_MAPPING, {
+    rows:    ['Port', 'Lane'],
+    columns: ['TYPE', 'Load Status'],
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
+    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+  });
+
+  // ══ Tab 4: Booking vs Actual ══════════════════════════════
+  makeFlexmonster('fm-booking-actual', rawData, BASE_MAPPING, {
+    rows:    ['Port'],
+    columns: [],
+    measures: [
+      { uniqueName: 'Booking TEU', aggregation: 'sum' },
+      { uniqueName: 'Actual TEU',  aggregation: 'sum' },
+      { uniqueName: 'Fulfill Rate', aggregation: 'average' }
+    ],
+    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+  });
+
+  // ══ Tab 5: Weekly Trend ════════════════════════════════════
+  // (chart drawn above, Flexmonster shows weekly breakdown)
+  makeFlexmonster('fm-weekly', rawData, BASE_MAPPING, {
+    rows:    ['Week'],
+    columns: [],
+    measures: [
+      { uniqueName: 'Actual TEU',  aggregation: 'sum' },
+      { uniqueName: 'Booking TEU', aggregation: 'sum' }
+    ],
+    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+  });
+
+  // ══ Tab 6: Outbound Report ══════════════════════════════════
+  makeFlexmonster('fm-outbound', obData, OBIB_MAPPING, {
+    rows:    ['Port', 'Year', 'ATD Month'],
+    columns: [],
+    measures: [
+      { uniqueName: 'Actual TEU',     aggregation: 'sum' },
+      { uniqueName: 'VS LY',          aggregation: 'sum' },
+      { uniqueName: 'VS LM',         aggregation: 'sum' }
+    ]
+  });
+
+  // ══ Tab 7: Inbound Report ══════════════════════════════════
+  makeFlexmonster('fm-inbound', ibData, OBIB_MAPPING, {
+    rows:    ['Port', 'Year', 'ATD Month'],
+    columns: [],
+    measures: [
+      { uniqueName: 'Actual TEU',     aggregation: 'sum' },
+      { uniqueName: 'VS LY',          aggregation: 'sum' },
+      { uniqueName: 'VS LM',         aggregation: 'sum' }
+    ]
+  });
+
 }
 </script>
 </body>
