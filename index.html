@@ -164,26 +164,37 @@ function prevMonth(mo) {
 }
 
 function buildYoYMoM(baseData, groupFields) {
+  // Step1: aggregate by groupFields
   const agg = {};
   baseData.forEach(r => {
-    const k = groupFields.map(f => (r[f] ?? '')).join('|');
-    if (!agg[k]) { agg[k] = { ...r, 'Actual TEU': 0 }; }
-    agg[k]['Actual TEU'] += (r['Actual TEU'] || 0);
+    const k = groupFields.map(f => String(r[f] ?? '')).join('|');
+    if (!agg[k]) { agg[k] = {}; groupFields.forEach(f => { agg[k][f] = r[f]; }); agg[k]['Actual TEU'] = 0; }
+    agg[k]['Actual TEU'] += (Number(r['Actual TEU']) || 0);
   });
+  // Step2: build lookup by (Port|ATD_Year|ATD Month) for OB/IB — groupFields = ['Port','ATD_Year','ATD Month']
+  // generic: build lookup by (port + year + month) where applicable
+  const portIdx  = groupFields.indexOf('Port');
+  const yearIdx  = groupFields.indexOf('ATD_Year');
+  const monthIdx = groupFields.indexOf('ATD Month');
   const valMap = {};
   Object.values(agg).forEach(r => {
-    const k = groupFields.map(f => (r[f] ?? '')).join('|');
-    valMap[k] = r['Actual TEU'];
+    const port  = portIdx  >= 0 ? String(r['Port']      ?? '') : '';
+    const year  = yearIdx  >= 0 ? String(r['ATD_Year']  ?? '') : '';
+    const month = monthIdx >= 0 ? String(r['ATD Month'] ?? '') : '';
+    const k = port + '|' + year + '|' + month;
+    valMap[k] = (valMap[k] || 0) + r['Actual TEU'];
   });
   return Object.values(agg).map(r => {
-    const k = groupFields.map(f => (r[f] ?? '')).join('|');
-    const lyKey = [prevYear(r.ATD_Year), r['ATD Month']].join('|');
-    const lmKey = [r.ATD_Year, prevMonth(r['ATD Month'])].join('|');
+    const port  = portIdx  >= 0 ? String(r['Port']      ?? '') : '';
+    const year  = String(r['ATD_Year']  ?? '');
+    const month = String(r['ATD Month'] ?? '');
+    const lyKey = port + '|' + prevYear(year) + '|' + month;
+    const lmKey = port + '|' + year + '|' + prevMonth(month);
     r['VS LY'] = r['Actual TEU'] - (valMap[lyKey] || 0);
     r['VS LM'] = r['Actual TEU'] - (valMap[lmKey] || 0);
-    r['Year'] = r['ATD_Year'];
-    r['VS Last Year'] = r['VS LY'];
-    r['VS Last Month'] = r['VS LM'];
+    r['Year']           = r['ATD_Year'];
+    r['VS Last Year']   = r['VS LY'];
+    r['VS Last Month']  = r['VS LM'];
     return r;
   });
 }
@@ -275,24 +286,21 @@ function initDashboard() {
   makeFlexmonster('fm-port-month', rawData, BASE_MAPPING, {
     rows:    ['Port'],
     columns: ['ATD Month'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
-    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
   });
 
   // ══ Tab 2: Lane x Month ═══════════════════════════════════
   makeFlexmonster('fm-lane-month', rawData, BASE_MAPPING, {
     rows:    ['Lane'],
     columns: ['ATD Month'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
-    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
   });
 
   // ══ Tab 3: Port x Lane x Type ═════════════════════════════
   makeFlexmonster('fm-port-lane-type', rawData, BASE_MAPPING, {
     rows:    ['Port', 'Lane'],
     columns: ['TYPE', 'Load Status'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }],
-    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
   });
 
   // ══ Tab 4: Booking vs Actual ══════════════════════════════
@@ -303,8 +311,7 @@ function initDashboard() {
       { uniqueName: 'Booking TEU', aggregation: 'sum' },
       { uniqueName: 'Actual TEU',  aggregation: 'sum' },
       { uniqueName: 'Fulfill Rate', aggregation: 'average' }
-    ],
-    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+    ]
   });
 
   // ══ Tab 5: Weekly Trend ════════════════════════════════════
@@ -315,8 +322,7 @@ function initDashboard() {
     measures: [
       { uniqueName: 'Actual TEU',  aggregation: 'sum' },
       { uniqueName: 'Booking TEU', aggregation: 'sum' }
-    ],
-    filters: [{ uniqueName: 'ATD_Year', filter: { members: ['2026'] } }]
+    ]
   });
 
   // ══ Tab 6: Outbound Report ══════════════════════════════════
