@@ -219,7 +219,8 @@ function makePivot(divId, data, cfg) {
     aggregatorName: cfg.aggregatorName || 'Sum',
     rendererName:   cfg.rendererName   || 'Table',
     unusedAttrsVertical: false,
-    menuLimit: 3000
+    menuLimit: 3000,
+    sorters: {}   // Disable automatic alphabetical sorting so injectSubtotals row order is preserved
   });
 }
 
