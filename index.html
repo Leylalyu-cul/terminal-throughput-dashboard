@@ -108,6 +108,10 @@ let weeklyChart = null;
 let pvInit = {}; // tabId -> boolean, whether pivot was already rendered
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
+function filterYear(data, year) {
+  return data.filter(function(r) { return String(r['ATD_Year']) === String(year); });
+}
+
 function prevYear(yr) {
   var y = parseInt(yr);
   return isNaN(y) ? '' : String(y - 1);
@@ -281,8 +285,8 @@ function initDashboard() {
   var ibData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'IN'  || r['TYPE'] === 'T/S IN';  }));
 
   // Tab 1: Port x Month — render immediately (active tab)
-  // Add Port subtotal rows (Lane = "AEJEA汇总" etc.)
-  var dataWithPortTotals = injectSubtotals(rawData, 'Port');
+  // Add Port subtotal rows (Lane = "Σ AEJEA Total" etc.)
+  var dataWithPortTotals = injectSubtotals(filterYear(rawData, 2026), 'Port');
   makePivot('pv-port-month', dataWithPortTotals, {
     rows: ['Port', 'Lane'],
     cols: ['ATD Month'],
@@ -301,16 +305,18 @@ function initDashboard() {
   drawWeeklyChart();
 
   // Lazy render remaining tabs on first activation
-  // Pre-build data variants with subtotals
-  var portTotals     = injectSubtotals(rawData, 'Port');
-  var obTotals       = injectSubtotals(obData,  'Port');
-  var ibTotals       = injectSubtotals(ibData,  'Port');
+  // Pre-build data variants with subtotals (tabs 1-5 = 2026 only; tabs 6-7 = full data for VS LY)
+  var data2026        = filterYear(rawData, 2026);
+  var portTotals2026  = injectSubtotals(data2026, 'Port');
+  var obTotals        = injectSubtotals(obData,  'Port');
+  var ibTotals        = injectSubtotals(ibData,  'Port');
 
   var tabConfigs = {
-    'tab-lane-month':    { divId: 'pv-lane-month',    data: rawData,   config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: portTotals,config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals,config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
-    'tab-weekly-trend':  { divId: 'pv-weekly',         data: rawData,  config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
+    'tab-lane-month':    { divId: 'pv-lane-month',    data: data2026,        config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: portTotals2026,  config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026,  config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
+    'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
+    // OB/IB keep full data (includes 2025 for VS LY calculation in buildYoYMoM)
     'tab-outbound':      { divId: 'pv-outbound',       data: obTotals, config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
     'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals, config: { rows: ['Port', 'Lane'],  cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
   };
