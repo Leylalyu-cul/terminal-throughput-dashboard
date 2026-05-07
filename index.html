@@ -5,17 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <!-- Flexmonster CSS -->
-  <link rel="stylesheet" href="https://cdn.flexmonster.com/theme/light/flexmonster.min.css">
+  <!-- PivotTable.js CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/pivottable@2.23.0/dist/pivot.min.css">
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
     .tab-pane { min-height: 700px; padding: 16px; }
     .tab-content { border: 1px solid #dee2e6; border-top: none; background: #fff; }
-    .fm-wrap { width: 100%; height: 600px; }
+    .pivot-wrap { width: 100%; min-height: 580px; overflow: auto; }
     #tab-weekly-trend .chart-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
-    .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
+    /* PivotTable.js overrides */
+    .pvtUi { font-size: 13px; }
+    .pvtTable { font-size: 12px; }
+    .pvtTable td, .pvtTable th { padding: 4px 8px; white-space: nowrap; }
+    .pvtAxisContainer { background: #f7f9fc; border: 1px solid #d0d7de; }
+    .pvtFilterBox { z-index: 9999; }
+    .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -37,38 +43,38 @@
 
     <!-- Tab 1: Port x Month -->
     <div class="tab-pane fade show active" id="tab-port-month">
-      <div id="fm-port-month" class="fm-wrap"></div>
+      <div id="pv-port-month" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 2: Lane x Month -->
     <div class="tab-pane fade" id="tab-lane-month">
-      <div id="fm-lane-month" class="fm-wrap"></div>
+      <div id="pv-lane-month" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 3: Port x Lane x Type -->
     <div class="tab-pane fade" id="tab-port-lane-type">
-      <div id="fm-port-lane-type" class="fm-wrap"></div>
+      <div id="pv-port-lane-type" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 4: Booking vs Actual -->
     <div class="tab-pane fade" id="tab-booking-actual">
-      <div id="fm-booking-actual" class="fm-wrap"></div>
+      <div id="pv-booking-actual" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 5: Weekly Trend -->
     <div class="tab-pane fade" id="tab-weekly-trend">
       <div class="chart-wrap"><canvas id="chart-weekly-canvas"></canvas></div>
-      <div id="fm-weekly" class="fm-wrap"></div>
+      <div id="pv-weekly" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 6: Outbound -->
     <div class="tab-pane fade" id="tab-outbound">
-      <div id="fm-outbound" class="fm-wrap"></div>
+      <div id="pv-outbound" class="pivot-wrap"></div>
     </div>
 
     <!-- Tab 7: Inbound -->
     <div class="tab-pane fade" id="tab-inbound">
-      <div id="fm-inbound" class="fm-wrap"></div>
+      <div id="pv-inbound" class="pivot-wrap"></div>
     </div>
 
   </div><!-- /tab-content -->
@@ -80,274 +86,202 @@
 <script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js"></script>
 <!-- JSZip -->
 <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
-<!-- Flexmonster (no version number = official recommended path) -->
-<script src="https://cdn.flexmonster.com/flexmonster.js"></script>
+<!-- jQuery (required by PivotTable.js) -->
+<script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
+<!-- jQuery UI (required for drag-drop) -->
+<script src="https://unpkg.com/jquery-ui@1.13.2/dist/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/jquery-ui@1.13.2/dist/themes/smoothness/jquery-ui.css">
+<!-- PivotTable.js -->
+<script src="https://unpkg.com/pivottable@2.23.0/dist/pivot.min.js"></script>
 
 <script>
 'use strict';
 
-// ════════════════════════════════════════════════════════════════
-//  DATA LOADING
-// ════════════════════════════════════════════════════════════════
 let rawData = [];
 let weeklyChart = null;
-let fmInstances = {}; // tabId -> Flexmonster instance
+let pvInit = {}; // tabId -> boolean, whether pivot was already rendered
 
-// Base field mapping (same for all raw-data tabs)
-const BASE_MAPPING = {
-  'Port':        { type: 'string' },
-  'Lane':        { type: 'string' },
-  'TYPE':        { type: 'string' },
-  'Load Status': { type: 'string' },
-  'ATD_Year':    { type: 'string' },
-  'ATD Month':   { type: 'string' },
-  'Week':        { type: 'string' },
-  'COC-SOC':     { type: 'string' },
-  'Actual TEU':  { type: 'number' },
-  'Booking TEU': { type: 'number' },
-  'Fulfill Rate':{ type: 'number' }
-};
-
-// OB/IB extended mapping (computed fields added)
-const OBIB_MAPPING = Object.assign({}, BASE_MAPPING, {
-  'Year':           { type: 'string' },
-  'VS LY':          { type: 'number' },
-  'VS LM':          { type: 'number' },
-  'VS Last Year':   { type: 'number' },
-  'VS Last Month':  { type: 'number' }
-});
-// ES5 fallback for Object.assign
-if (typeof Object.assign !== 'function') {
-  Object.assign = function(target) {
-    var sources = Array.prototype.slice.call(arguments, 1);
-    sources.forEach(function(src) {
-      if (src) {
-        Object.keys(src).forEach(function(k) { target[k] = src[k]; });
-      }
-    });
-    return target;
-  };
-}
-
-fetch('data/pivot_data.zip')
-  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ': pivot_data.zip not found'); return r.arrayBuffer(); })
-  .then(buf => JSZip.loadAsync(buf))
-  .then(zip => {
-    const jf = zip.file('pivot_data.json');
-    if (!jf) throw new Error('pivot_data.json not found inside zip');
-    return jf.async('string');
-  })
-  .then(txt => JSON.parse(txt))
-  .then(data => {
-    rawData = data;
-    initDashboard();
-  })
-  .catch(err => {
-    document.body.innerHTML += '<div class="loading" style="color:#dc3545">Failed to load data: ' + err.message + '</div>';
-  });
-
-
-// ════════════════════════════════════════════════════════════════
-//  HELPERS
-// ════════════════════════════════════════════════════════════════
+// ─── helpers ─────────────────────────────────────────────────────────────────
 function prevYear(yr) {
-  const y = parseInt(yr);
+  var y = parseInt(yr);
   return isNaN(y) ? '' : String(y - 1);
 }
 
 function prevMonth(mo) {
   if (!mo) return '';
-  const [y, m] = mo.split('-').map(Number);
+  var parts = mo.split('-').map(Number);
+  var y = parts[0], m = parts[1];
   if (isNaN(y) || isNaN(m)) return '';
-  const d = new Date(y, m - 2, 1);
+  var d = new Date(y, m - 2, 1);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
-function buildYoYMoM(baseData, groupFields) {
-  // Step1: aggregate by groupFields
-  const agg = {};
-  baseData.forEach(r => {
-    const k = groupFields.map(f => String(r[f] ?? '')).join('|');
-    if (!agg[k]) { agg[k] = {}; groupFields.forEach(f => { agg[k][f] = r[f]; }); agg[k]['Actual TEU'] = 0; }
+function buildYoYMoM(baseData) {
+  // Aggregate by Port + ATD_Year + ATD Month
+  var agg = {};
+  baseData.forEach(function(r) {
+    var port  = String(r['Port']       || '');
+    var year  = String(r['ATD_Year']   || '');
+    var month = String(r['ATD Month']  || '');
+    var k = port + '|' + year + '|' + month;
+    if (!agg[k]) {
+      agg[k] = {
+        'Port': port, 'ATD_Year': year, 'ATD Month': month,
+        'Actual TEU': 0
+      };
+    }
     agg[k]['Actual TEU'] += (Number(r['Actual TEU']) || 0);
   });
-  // Step2: build lookup by (Port|ATD_Year|ATD Month) for OB/IB — groupFields = ['Port','ATD_Year','ATD Month']
-  // generic: build lookup by (port + year + month) where applicable
-  const portIdx  = groupFields.indexOf('Port');
-  const yearIdx  = groupFields.indexOf('ATD_Year');
-  const monthIdx = groupFields.indexOf('ATD Month');
-  const valMap = {};
-  Object.values(agg).forEach(r => {
-    const port  = portIdx  >= 0 ? String(r['Port']      ?? '') : '';
-    const year  = yearIdx  >= 0 ? String(r['ATD_Year']  ?? '') : '';
-    const month = monthIdx >= 0 ? String(r['ATD Month'] ?? '') : '';
-    const k = port + '|' + year + '|' + month;
-    valMap[k] = (valMap[k] || 0) + r['Actual TEU'];
+
+  // Build lookup map
+  var valMap = {};
+  Object.keys(agg).forEach(function(k) {
+    valMap[k] = agg[k]['Actual TEU'];
   });
-  return Object.values(agg).map(r => {
-    const port  = portIdx  >= 0 ? String(r['Port']      ?? '') : '';
-    const year  = String(r['ATD_Year']  ?? '');
-    const month = String(r['ATD Month'] ?? '');
-    const lyKey = port + '|' + prevYear(year) + '|' + month;
-    const lmKey = port + '|' + year + '|' + prevMonth(month);
-    r['VS LY'] = r['Actual TEU'] - (valMap[lyKey] || 0);
-    r['VS LM'] = r['Actual TEU'] - (valMap[lmKey] || 0);
-    r['Year']           = r['ATD_Year'];
-    r['VS Last Year']   = r['VS LY'];
-    r['VS Last Month']  = r['VS LM'];
+
+  return Object.values(agg).map(function(r) {
+    var port  = r['Port'];
+    var year  = r['ATD_Year'];
+    var month = r['ATD Month'];
+    var lyKey = port + '|' + prevYear(year) + '|' + month;
+    var lmKey = port + '|' + year + '|' + prevMonth(month);
+    var ly = valMap[lyKey] || 0;
+    var lm = valMap[lmKey] || 0;
+    r['VS LY']  = r['Actual TEU'] - ly;
+    r['VS LM']  = r['Actual TEU'] - lm;
     return r;
   });
 }
 
+// ─── PivotTable.js factory ───────────────────────────────────────────────────
+// aggregators: intSum / floatSum / count / average
+function makePivot(divId, data, config) {
+  var $el = $('#' + divId);
+  $el.empty();
 
-// ════════════════════════════════════════════════════════════════
-//  FLEXMONSTER FACTORY
-// ════════════════════════════════════════════════════════════════
-function makeFlexmonster(divId, data, mapping, slice) {
-  const container = document.getElementById(divId);
-  container.innerHTML = ''; // clear previous
+  var opts = {
+    data: data,
+    rows:       config.rows    || [],
+    cols:       config.cols    || [],
+    vals:       config.vals    || [],
+    aggregatorName: config.aggregatorName || 'Sum',
+    rendererName:   config.rendererName   || 'Table',
+    unusedAttrsVertical: false,
+    menuLimit: 3000,
+    onRefresh: function(pvConfig) {
+      // Keep in sync if user drags fields
+    }
+  };
 
-  // Destroy old instance if any
-  if (fmInstances[divId]) {
-    try { fmInstances[divId].dispose(); } catch(e) {}
-    fmInstances[divId] = null;
-  }
+  $el.pivotUI(data, opts);
+}
 
-  const pivot = new Flexmonster({
-    container: '#' + divId,
-    componentFolder: 'https://cdn.flexmonster.com/',
-    dataSource: {
-      data: data,
-      mapping: mapping
+// ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
+function drawWeeklyChart() {
+  var weekly = {};
+  rawData.forEach(function(r) {
+    var w = String(r['Week'] || '');
+    if (!w) return;
+    if (!weekly[w]) weekly[w] = { 'Actual TEU': 0, 'Booking TEU': 0 };
+    weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
+    weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
+  });
+
+  var rows = Object.keys(weekly)
+    .sort(function(a, b) {
+      return parseInt((a || '').replace(/\D/g, '')) - parseInt((b || '').replace(/\D/g, ''));
+    })
+    .map(function(w) {
+      return { Week: w, 'Actual TEU': weekly[w]['Actual TEU'], 'Booking TEU': weekly[w]['Booking TEU'] };
+    });
+
+  var ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
+  if (weeklyChart) weeklyChart.destroy();
+  weeklyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map(function(r) { return r.Week; }),
+      datasets: [
+        { label: 'Actual TEU',  data: rows.map(function(r) { return r['Actual TEU'];  }), borderColor: '#2c5aa0', backgroundColor: 'rgba(44,90,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 },
+        { label: 'Booking TEU', data: rows.map(function(r) { return r['Booking TEU']; }), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
+      ]
     },
-    slice: slice,
     options: {
-      toolbar: true,
-      showGrandTotals: 'on',
-      showRowTotals: 'on'
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.parsed.y.toLocaleString(); } } }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'TEU' } },
+        x: { title: { display: true, text: 'Week' } }
+      }
     }
   });
-
-  fmInstances[divId] = pivot;
-  return pivot;
 }
 
-
-// ════════════════════════════════════════════════════════════════
-//  INIT DASHBOARD
-// ════════════════════════════════════════════════════════════════
+// ─── Init Dashboard ──────────────────────────────────────────────────────────
 function initDashboard() {
 
-  // ── Weekly chart (Chart.js) ───────────────────────────────
-  function drawWeeklyChart() {
-    const weekly = {};
-    rawData.forEach(r => {
-      const w = String(r['Week'] || '');
-      if (!w) return;
-      if (!weekly[w]) weekly[w] = { 'Actual TEU': 0, 'Booking TEU': 0 };
-      weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
-      weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
-    });
-    const rows = Object.entries(weekly)
-      .map(([w, v]) => ({ Week: w, 'Actual TEU': v['Actual TEU'], 'Booking TEU': v['Booking TEU'] }))
-      .sort((a, b) => parseInt((a.Week||'').replace(/\D/g,'')) - parseInt((b.Week||'').replace(/\D/g,'')));
+  // Pre-compute OB / IB data
+  var obData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'OUT' || r['TYPE'] === 'T/S OUT'; }));
+  var ibData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'IN'  || r['TYPE'] === 'T/S IN';  }));
 
-    const ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
-    if (weeklyChart) weeklyChart.destroy();
-    weeklyChart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: rows.map(r => r.Week),
-        datasets: [
-          { label: 'Actual TEU',  data: rows.map(r => r['Actual TEU']),  borderColor: '#2c5aa0', backgroundColor: 'rgba(44,90,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 },
-          { label: 'Booking TEU', data: rows.map(r => r['Booking TEU']), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: true }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toLocaleString() } } },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'TEU' } }, x: { title: { display: true, text: 'Week' } } }
-      }
-    });
-  }
+  // Tab 1: Port x Month — render immediately (active tab)
+  makePivot('pv-port-month', rawData, {
+    rows: ['Port'],
+    cols: ['ATD Month'],
+    vals: ['Actual TEU'],
+    aggregatorName: 'Sum'
+  });
+  pvInit['pv-port-month'] = true;
+
+  // Weekly chart
   drawWeeklyChart();
 
-  // ── Pre-compute OB / IB ───────────────────────────────────
-  const obData = buildYoYMoM(
-    rawData.filter(r => ['OUT', 'T/S OUT'].includes(r['TYPE'])),
-    ['Port', 'ATD_Year', 'ATD Month']
-  );
-  const ibData = buildYoYMoM(
-    rawData.filter(r => ['IN', 'T/S IN'].includes(r['TYPE'])),
-    ['Port', 'ATD_Year', 'ATD Month']
-  );
+  // Lazy render remaining tabs on first activation
+  var tabConfigs = {
+    'tab-lane-month':    { divId: 'pv-lane-month',    data: rawData,  config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: rawData,  config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: rawData,  config: { rows: ['Port'],           cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
+    'tab-weekly-trend':  { divId: 'pv-weekly',         data: rawData,  config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
+    'tab-outbound':      { divId: 'pv-outbound',       data: obData,   config: { rows: ['Port', 'ATD_Year', 'ATD Month'], cols: [],         vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-inbound':       { divId: 'pv-inbound',        data: ibData,   config: { rows: ['Port', 'ATD_Year', 'ATD Month'], cols: [],         vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
+  };
 
-  // ══ Tab 1: Port x Month ══════════════════════════════════
-  makeFlexmonster('fm-port-month', rawData, BASE_MAPPING, {
-    rows:    ['Port'],
-    columns: ['ATD Month'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
+  // Listen to tab show events
+  document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(function(el) {
+    el.addEventListener('shown.bs.tab', function(e) {
+      var tabId = e.target.getAttribute('href').replace('#', '');
+      var cfg = tabConfigs[tabId];
+      if (cfg && !pvInit[cfg.divId]) {
+        makePivot(cfg.divId, cfg.data, cfg.config);
+        pvInit[cfg.divId] = true;
+      }
+    });
   });
-
-  // ══ Tab 2: Lane x Month ═══════════════════════════════════
-  makeFlexmonster('fm-lane-month', rawData, BASE_MAPPING, {
-    rows:    ['Lane'],
-    columns: ['ATD Month'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
-  });
-
-  // ══ Tab 3: Port x Lane x Type ═════════════════════════════
-  makeFlexmonster('fm-port-lane-type', rawData, BASE_MAPPING, {
-    rows:    ['Port', 'Lane'],
-    columns: ['TYPE', 'Load Status'],
-    measures: [{ uniqueName: 'Actual TEU', aggregation: 'sum' }]
-  });
-
-  // ══ Tab 4: Booking vs Actual ══════════════════════════════
-  makeFlexmonster('fm-booking-actual', rawData, BASE_MAPPING, {
-    rows:    ['Port'],
-    columns: [],
-    measures: [
-      { uniqueName: 'Booking TEU', aggregation: 'sum' },
-      { uniqueName: 'Actual TEU',  aggregation: 'sum' },
-      { uniqueName: 'Fulfill Rate', aggregation: 'average' }
-    ]
-  });
-
-  // ══ Tab 5: Weekly Trend ════════════════════════════════════
-  // (chart drawn above, Flexmonster shows weekly breakdown)
-  makeFlexmonster('fm-weekly', rawData, BASE_MAPPING, {
-    rows:    ['Week'],
-    columns: [],
-    measures: [
-      { uniqueName: 'Actual TEU',  aggregation: 'sum' },
-      { uniqueName: 'Booking TEU', aggregation: 'sum' }
-    ]
-  });
-
-  // ══ Tab 6: Outbound Report ══════════════════════════════════
-  makeFlexmonster('fm-outbound', obData, OBIB_MAPPING, {
-    rows:    ['Port', 'Year', 'ATD Month'],
-    columns: [],
-    measures: [
-      { uniqueName: 'Actual TEU',     aggregation: 'sum' },
-      { uniqueName: 'VS LY',          aggregation: 'sum' },
-      { uniqueName: 'VS LM',         aggregation: 'sum' }
-    ]
-  });
-
-  // ══ Tab 7: Inbound Report ══════════════════════════════════
-  makeFlexmonster('fm-inbound', ibData, OBIB_MAPPING, {
-    rows:    ['Port', 'Year', 'ATD Month'],
-    columns: [],
-    measures: [
-      { uniqueName: 'Actual TEU',     aggregation: 'sum' },
-      { uniqueName: 'VS LY',          aggregation: 'sum' },
-      { uniqueName: 'VS LM',         aggregation: 'sum' }
-    ]
-  });
-
 }
+
+// ─── Load Data ───────────────────────────────────────────────────────────────
+fetch('data/pivot_data.zip')
+  .then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status + ': pivot_data.zip not found');
+    return r.arrayBuffer();
+  })
+  .then(function(buf) { return JSZip.loadAsync(buf); })
+  .then(function(zip) {
+    var jf = zip.file('pivot_data.json');
+    if (!jf) throw new Error('pivot_data.json not found inside zip');
+    return jf.async('string');
+  })
+  .then(function(txt) { return JSON.parse(txt); })
+  .then(function(data) {
+    rawData = data;
+    initDashboard();
+  })
+  .catch(function(err) {
+    document.body.innerHTML += '<div class="loading" style="color:#dc3545">Failed to load data: ' + err.message + '</div>';
+  });
 </script>
 </body>
 </html>
