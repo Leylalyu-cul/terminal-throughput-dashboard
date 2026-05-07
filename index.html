@@ -23,8 +23,11 @@
     .pvtFilterBox { z-index: 9999; }
     .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
     /* Subtotal rows injected via injectSubtotals(): Lane = "AEJEA汇总" etc. */
+    /* injectSubtotals: subtotal rows have Lane = "Σ XXXX Total" — highlight them */
     tr.subtotal-row td { background: #ddeeff !important; font-weight: bold; color: #1a3a6c; }
     tr.subtotal-row td:first-child { color: #1a3a6c; }
+    /* also catch any remaining Chinese-format rows for backward compat */
+    tr.subtotal-row td { background: #ddeeff !important; }
   </style>
 </head>
 <body>
@@ -192,7 +195,7 @@ function injectSubtotals(data, groupByField) {
       if (k === groupByField) {
         total[k] = g;
       } else if (k === 'Lane') {
-        total[k] = g + '汇总';   // e.g. "AEJEA汇总"
+        total[k] = 'Σ ' + g + ' Total';   // Σ (Sigma) sorts after all regular lanes alphabetically
       } else if (numFields[k]) {
         total[k] = rows.reduce(function(s, r) { return s + (parseFloat(r[k]) || 0); }, 0);
       } else {
@@ -220,7 +223,9 @@ function makePivot(divId, data, cfg) {
     rendererName:   cfg.rendererName   || 'Table',
     unusedAttrsVertical: false,
     menuLimit: 3000,
-    sorters: {}   // Disable automatic alphabetical sorting so injectSubtotals row order is preserved
+    // Note: PivotTable.js always sorts rows alphabetically.
+    // To force subtotal rows to appear LAST, use "Σ " prefix on Lane field
+    // (Σ sorts after all uppercase letters Z in ASCII, so "Σ AEJEA Total" always comes after "WAT").
   });
 }
 
@@ -288,7 +293,7 @@ function initDashboard() {
   // Highlight subtotal rows in Tab 1
   setTimeout(function() {
     $('#pv-port-month').find('.pvtTable tbody tr').each(function() {
-      if (/汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
     });
   }, 100);
 
@@ -322,7 +327,7 @@ function initDashboard() {
       // Mark subtotal rows after render (handles re-renders too)
       setTimeout(function() {
         $('#' + cfg.divId).find('.pvtTable tbody tr').each(function() {
-          if (/汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+          if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
         });
       }, 100);
     });
