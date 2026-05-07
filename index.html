@@ -286,16 +286,13 @@ function initDashboard() {
   pvInit['pv-port-month'] = true;
   // Highlight subtotal rows in Tab 1
   setTimeout(function() {
-    $('#pv-port-month').find('.pvtRowTable tr').each(function() {
+    $('#pv-port-month').find('.pvtTable tbody tr').each(function() {
       if (/汇总/.test($(this).text())) $(this).addClass('subtotal-row');
     });
   }, 100);
 
-  // Weekly chart — guard so it only draws once
-  if (!window._weeklyChartDrawn) {
-    drawWeeklyChart();
-    window._weeklyChartDrawn = true;
-  }
+  // Weekly chart — draw once on init (Tab 5 is hidden, chart still renders)
+  drawWeeklyChart();
 
   // Lazy render remaining tabs on first activation
   // Pre-build data variants with subtotals
@@ -323,9 +320,8 @@ function initDashboard() {
       }
       // Mark subtotal rows after render (handles re-renders too)
       setTimeout(function() {
-        $('#' + cfg.divId).find('.pvtRowTable tr').each(function() {
-          var txt = $(this).text();
-          if (/汇总/.test(txt)) $(this).addClass('subtotal-row');
+        $('#' + cfg.divId).find('.pvtTable tbody tr').each(function() {
+          if (/汇总/.test($(this).text())) $(this).addClass('subtotal-row');
         });
       }, 100);
     });
