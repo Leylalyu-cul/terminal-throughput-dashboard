@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
-  <link rel="stylesheet" href="https://unpkg.com/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <!-- PivotTable.js CSS -->
   <link rel="stylesheet" href="https://unpkg.com/pivottable@2.23.0/dist/pivot.min.css">
   <style>
@@ -81,18 +81,18 @@
 </div><!-- /container -->
 
 <!-- Bootstrap JS -->
-<script src="https://unpkg.com/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <!-- Chart.js -->
-<script src="https://unpkg.com/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <!-- JSZip -->
-<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <!-- jQuery (required by PivotTable.js) -->
-<script src="https://unpkg.com/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <!-- jQuery UI (required for drag-drop) -->
-<script src="https://unpkg.com/jquery-ui@1.13.2/dist/jquery-ui.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/jquery-ui@1.13.2/dist/themes/smoothness/jquery-ui.css">
+<script src="https://cdn.jsdelivr.net/npm/jquery-ui@1.13.2/dist/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-ui@1.13.2/themes/smoothness/jquery-ui.min.css">
 <!-- PivotTable.js -->
-<script src="https://unpkg.com/pivottable@2.23.0/dist/pivot.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.min.js"></script>
 
 <script>
 'use strict';
@@ -155,25 +155,20 @@ function buildYoYMoM(baseData) {
 
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
 // aggregators: intSum / floatSum / count / average
-function makePivot(divId, data, config) {
+function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
   $el.empty();
 
-  var opts = {
+  $el.pivotUI(data, {
     data: data,
-    rows:       config.rows    || [],
-    cols:       config.cols    || [],
-    vals:       config.vals    || [],
-    aggregatorName: config.aggregatorName || 'Sum',
-    rendererName:   config.rendererName   || 'Table',
+    rows:       cfg.rows    || [],
+    cols:       cfg.cols    || [],
+    vals:       cfg.vals    || [],
+    aggregatorName: cfg.aggregatorName || 'Sum',
+    rendererName:   cfg.rendererName   || 'Table',
     unusedAttrsVertical: false,
-    menuLimit: 3000,
-    onRefresh: function(pvConfig) {
-      // Keep in sync if user drags fields
-    }
-  };
-
-  $el.pivotUI(data, opts);
+    menuLimit: 3000
+  });
 }
 
 // ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
@@ -236,8 +231,11 @@ function initDashboard() {
   });
   pvInit['pv-port-month'] = true;
 
-  // Weekly chart
-  drawWeeklyChart();
+  // Weekly chart — guard so it only draws once
+  if (!window._weeklyChartDrawn) {
+    drawWeeklyChart();
+    window._weeklyChartDrawn = true;
+  }
 
   // Lazy render remaining tabs on first activation
   var tabConfigs = {
