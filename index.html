@@ -22,6 +22,9 @@
     .pvtAxisContainer { background: #f7f9fc; border: 1px solid #d0d7de; }
     .pvtFilterBox { z-index: 9999; }
     .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
+    /* Subtotal rows injected via injectSubtotals(): Lane = "AEJEA汇总" etc. */
+    tr.subtotal-row td { background: #ddeeff !important; font-weight: bold; color: #1a3a6c; }
+    tr.subtotal-row td:first-child { color: #1a3a6c; }
   </style>
 </head>
 <body>
@@ -153,8 +156,57 @@ function buildYoYMoM(baseData) {
   });
 }
 
+// ─── Inject Port / Lane Subtotal Rows ────────────────────────────────────────
+// For each group (e.g. each Port), inject a synthetic "AEJEA汇总" row containing the sum.
+// This makes PivotTable.js display a Port-total row after all its lanes.
+function injectSubtotals(data, groupByField) {
+  if (!data || data.length === 0) return data;
+
+  var numFields = null;  // lazy-detect numeric fields from first row
+
+  // Group rows by the groupByField
+  var groups = {};
+  data.forEach(function(r) {
+    var g = String(r[groupByField] || '');
+    if (!g) return;
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(r);
+  });
+
+  var result = [];
+  Object.keys(groups).sort().forEach(function(g) {
+    var rows = groups[g];
+    // Detect numeric fields once
+    if (!numFields) {
+      numFields = {};
+      Object.keys(rows[0]).forEach(function(k) {
+        var v = rows[0][k];
+        numFields[k] = (typeof v === 'number' || !isNaN(parseFloat(v))) && isFinite(v);
+      });
+    }
+    // Add all original rows
+    rows.forEach(function(r) { result.push(r); });
+    // Add subtotal row: copy first row, override group key + lane + numeric sums
+    var total = {};
+    Object.keys(rows[0]).forEach(function(k) {
+      if (k === groupByField) {
+        total[k] = g;
+      } else if (k === 'Lane') {
+        total[k] = g + '汇总';   // e.g. "AEJEA汇总"
+      } else if (numFields[k]) {
+        total[k] = rows.reduce(function(s, r) { return s + (parseFloat(r[k]) || 0); }, 0);
+      } else {
+        total[k] = '';
+      }
+    });
+    total['_isSubtotal'] = true;  // marker for CSS
+    result.push(total);
+  });
+
+  return result;
+}
+
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
-// aggregators: intSum / floatSum / count / average
 function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
   $el.empty();
@@ -223,13 +275,21 @@ function initDashboard() {
   var ibData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'IN'  || r['TYPE'] === 'T/S IN';  }));
 
   // Tab 1: Port x Month — render immediately (active tab)
-  makePivot('pv-port-month', rawData, {
-    rows: ['Port'],
+  // Add Port subtotal rows (Lane = "AEJEA汇总" etc.)
+  var dataWithPortTotals = injectSubtotals(rawData, 'Port');
+  makePivot('pv-port-month', dataWithPortTotals, {
+    rows: ['Port', 'Lane'],
     cols: ['ATD Month'],
     vals: ['Actual TEU'],
     aggregatorName: 'Sum'
   });
   pvInit['pv-port-month'] = true;
+  // Highlight subtotal rows in Tab 1
+  setTimeout(function() {
+    $('#pv-port-month').find('.pvtRowTable tr').each(function() {
+      if (/汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+    });
+  }, 100);
 
   // Weekly chart — guard so it only draws once
   if (!window._weeklyChartDrawn) {
@@ -238,13 +298,18 @@ function initDashboard() {
   }
 
   // Lazy render remaining tabs on first activation
+  // Pre-build data variants with subtotals
+  var portTotals     = injectSubtotals(rawData, 'Port');
+  var obTotals       = injectSubtotals(obData,  'Port');
+  var ibTotals       = injectSubtotals(ibData,  'Port');
+
   var tabConfigs = {
-    'tab-lane-month':    { divId: 'pv-lane-month',    data: rawData,  config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: rawData,  config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-booking-actual':{ divId: 'pv-booking-actual', data: rawData,  config: { rows: ['Port'],           cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
+    'tab-lane-month':    { divId: 'pv-lane-month',    data: rawData,   config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: portTotals,config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals,config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
     'tab-weekly-trend':  { divId: 'pv-weekly',         data: rawData,  config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
-    'tab-outbound':      { divId: 'pv-outbound',       data: obData,   config: { rows: ['Port', 'ATD_Year', 'ATD Month'], cols: [],         vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-inbound':       { divId: 'pv-inbound',        data: ibData,   config: { rows: ['Port', 'ATD_Year', 'ATD Month'], cols: [],         vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
+    'tab-outbound':      { divId: 'pv-outbound',       data: obTotals, config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals, config: { rows: ['Port', 'Lane'],  cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
   };
 
   // Listen to tab show events
@@ -256,6 +321,13 @@ function initDashboard() {
         makePivot(cfg.divId, cfg.data, cfg.config);
         pvInit[cfg.divId] = true;
       }
+      // Mark subtotal rows after render (handles re-renders too)
+      setTimeout(function() {
+        $('#' + cfg.divId).find('.pvtRowTable tr').each(function() {
+          var txt = $(this).text();
+          if (/汇总/.test(txt)) $(this).addClass('subtotal-row');
+        });
+      }, 100);
     });
   });
 }
