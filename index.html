@@ -12,7 +12,7 @@
     body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; }
     .tab-pane { min-height: 700px; padding: 16px; }
     .tab-content { border: 1px solid #dee2e6; border-top: none; background: #fff; }
-    .pivot-wrap { width: 100%; min-height: 580px; overflow: auto; }
+    .pivot-wrap { width: 100%; min-height: 580px; overflow: auto; max-height: 70vh; }
     #tab-weekly-trend .chart-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
     /* PivotTable.js overrides */
@@ -22,12 +22,49 @@
     .pvtAxisContainer { background: #f7f9fc; border: 1px solid #d0d7de; }
     .pvtFilterBox { z-index: 9999; }
     .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
-    /* Subtotal rows injected via injectSubtotals(): Lane = "AEJEA汇总" etc. */
-    /* injectSubtotals: subtotal rows have Lane = "Σ XXXX Total" — highlight them */
+    /* ── Sticky header & column ─────────────────────────────────────────── */
+    /* Column headers — sticky top */
+    .pvtTable thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #f7f9fc;
+    }
+    /* Left row-label column — sticky left */
+    .pvtTable tbody th {
+      position: sticky;
+      left: 0;
+      z-index: 5;
+      background: white;
+    }
+    /* Top-left cell: both top + left */
+    .pvtTable thead th:first-child,
+    .pvtTable thead th.pvtRowLabel {
+      position: sticky;
+      top: 0;
+      left: 0;
+      z-index: 20;
+      background: #f7f9fc;
+    }
+    /* Row-total (right side) columns — sticky right */
+    .pvtTable td.colTotal,
+    .pvtTable th.colTotal {
+      position: sticky;
+      right: 0;
+      z-index: 6;
+      background: #fff8e1;
+    }
+    /* Grand-total header cell — top + right */
+    .pvtTable thead th.colTotal {
+      position: sticky;
+      top: 0;
+      right: 0;
+      z-index: 21;
+      background: #fff8e1;
+    }
+    /* Subtotal rows: "Σ XXXX Total" — highlight blue */
     tr.subtotal-row td { background: #ddeeff !important; font-weight: bold; color: #1a3a6c; }
     tr.subtotal-row td:first-child { color: #1a3a6c; }
-    /* also catch any remaining Chinese-format rows for backward compat */
-    tr.subtotal-row td { background: #ddeeff !important; }
   </style>
 </head>
 <body>
@@ -231,6 +268,16 @@ function makePivot(divId, data, cfg) {
     // To force subtotal rows to appear LAST, use "Σ " prefix on Lane field
     // (Σ sorts after all uppercase letters Z in ASCII, so "Σ AEJEA Total" always comes after "WAT").
   });
+
+  // Enhance: mark row-label th cells and colTotal cells for CSS sticky
+  setTimeout(function() {
+    var $tbl = $el.find('.pvtTable');
+    $tbl.find('tbody th').addClass('pvtRowLabel');
+    // subtotal rows (Σ Total)
+    $tbl.find('tbody tr').each(function() {
+      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+    });
+  }, 150);
 }
 
 // ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
@@ -294,12 +341,6 @@ function initDashboard() {
     aggregatorName: 'Sum'
   });
   pvInit['pv-port-month'] = true;
-  // Highlight subtotal rows in Tab 1
-  setTimeout(function() {
-    $('#pv-port-month').find('.pvtTable tbody tr').each(function() {
-      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
-    });
-  }, 100);
 
   // Weekly chart — draw once on init (Tab 5 is hidden, chart still renders)
   drawWeeklyChart();
@@ -330,12 +371,6 @@ function initDashboard() {
         makePivot(cfg.divId, cfg.data, cfg.config);
         pvInit[cfg.divId] = true;
       }
-      // Mark subtotal rows after render (handles re-renders too)
-      setTimeout(function() {
-        $('#' + cfg.divId).find('.pvtTable tbody tr').each(function() {
-          if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
-        });
-      }, 100);
     });
   });
 }
