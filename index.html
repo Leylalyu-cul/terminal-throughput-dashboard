@@ -65,6 +65,11 @@
     /* Subtotal rows: "Σ XXXX Total" — highlight blue */
     tr.subtotal-row td { background: #ddeeff !important; font-weight: bold; color: #1a3a6c; }
     tr.subtotal-row td:first-child { color: #1a3a6c; }
+    /* ── Collapse toggle ───────────────────────────────────────────────────── */
+    .pvtRowLabel[rowspan] { cursor: pointer; user-select: none; }
+    .pvtRowLabel[rowspan]:hover { background: #cfe2ff !important; }
+    .pvtRowLabel[rowspan] .collapse-arrow { margin-right: 4px; font-size: 11px; color: #555; }
+    tr.pivot-group-hidden { display: none; }
   </style>
 </head>
 <body>
@@ -277,7 +282,39 @@ function makePivot(divId, data, cfg) {
     $tbl.find('tbody tr').each(function() {
       if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
     });
+    // Collapse: only for Port x Lane x Type (tab 3)
+    if (cfg.rows && cfg.rows[0] === 'Port') {
+      addCollapseHandlers($tbl);
+    }
   }, 150);
+}
+
+// ─── Collapsible groups (Port x Lane x Type) ─────────────────────────────────
+function addCollapseHandlers($tbl) {
+  $tbl.find('tbody th[rowspan]').each(function() {
+    var $th = $(this);
+    var rowspan = parseInt($th.attr('rowspan')) || 1;
+    var $groupRows = $th.closest('tr').add(
+      $th.closest('tr').nextAll('tr').slice(0, rowspan - 1)
+    );
+
+    // Insert collapse arrow
+    $th.prepend('<span class="collapse-arrow">▼</span>');
+
+    $th.on('click', function() {
+      var collapsed = $th.data('collapsed');
+      // Hide all group rows except the port-header row itself
+      if (collapsed) {
+        $groupRows.show();
+        $th.find('.collapse-arrow').text('▼');
+        $th.data('collapsed', false);
+      } else {
+        $groupRows.not($th.closest('tr')).hide();
+        $th.find('.collapse-arrow').text('▶');
+        $th.data('collapsed', true);
+      }
+    });
+  });
 }
 
 // ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
