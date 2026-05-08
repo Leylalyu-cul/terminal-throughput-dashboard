@@ -391,8 +391,11 @@ function initDashboard() {
 
   var tabConfigs = {
     'tab-lane-month':    { divId: 'pv-lane-month',    data: data2026,        config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-port-lane-type':{ divId: 'pv-port-lane-type',data: portTotals2026,  config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026,  config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
+    // Tab 3 (Port x Lane x Type): has col dims (TYPE, Load Status) — skip injectSubtotals,
+    // PivotTable.js auto-shows Port-column-totals on the right side (no need for Σ rows).
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,        config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    // Tab 4 (Booking vs Actual): has col dim (ATD Month) — same, no Σ injection needed.
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: data2026,        config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
     'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
     // OB/IB keep full data (includes 2025 for VS LY calculation in buildYoYMoM)
     'tab-outbound':      { divId: 'pv-outbound',       data: obTotals, config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
