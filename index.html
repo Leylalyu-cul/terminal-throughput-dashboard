@@ -252,38 +252,6 @@ function injectSubtotals(data, groupByField) {
   return result;
 }
 
-// ─── Custom aggregators for Tab 4 (Booking vs Actual) ──────────────────────
-var customAggregators = {
-  'Gap (Booking - Actual)': function() {
-    return function(data, rowKey, colKey) {
-      var sumB = 0, sumA = 0;
-      data.forEach(function(r) {
-        sumB += parseFloat(r.Booking TEU') || 0;
-        sumA += parseFloat(r['Actual TEU']) || 0;
-      });
-      return {
-        value: function() { return sumB - sumA; },
-        format: function(x) { return x.toLocaleString(); },
-        numInputs: 0
-      };
-    };
-  },
-  'Fulfill Rate (Actual/Booking)': function() {
-    return function(data, rowKey, colKey) {
-      var sumB = 0, sumA = 0;
-      data.forEach(function(r) {
-        sumB += parseFloat(r.Booking TEU') || 0;
-        sumA += parseFloat(r['Actual TEU']) || 0;
-      });
-      return {
-        value: function() { return sumB === 0 ? 0 : sumA / sumB; },
-        format: function(x) { return (x * 100).toFixed(1) + '%'; },
-        numInputs: 0
-      };
-    };
-  }
-};
-
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
 function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
@@ -306,21 +274,53 @@ function makePivot(divId, data, cfg) {
   // Inject custom aggregators only for Tab 4 (Booking vs Actual)
   if (divId === 'pv-booking-actual') {
     opts.aggregators = $.extend({}, $.pivotUtl.aggregators, customAggregators);
-    opts.vals = ['Booking TEU', 'Actual TEU', 'Gap (Booking - Actual)', 'Fulfill Rate (Actual/Booking)'];
-    opts.aggregatorName = 'Integer Sum'; // default for vals, overridden per-val internally
-  }
-
   $el.pivotUI(opts);
 
-  // Enhance: mark row-label th cells and colTotal cells for CSS sticky
+  // Enhance: mark row-label th cells and subtotal rows
   setTimeout(function() {
     var $tbl = $el.find('.pvtTable');
     $tbl.find('tbody th').addClass('pvtRowLabel');
-    // subtotal rows (Σ Total)
     $tbl.find('tbody tr').each(function() {
       if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
     });
+
+    // ── Tab 4: Booking vs Actual — inject Gap & Fulfill Rate columns via DOM ──
+    if (divId === 'pv-booking-actual') {
+      injectGapFulfillCols($tbl);
+    }
   }, 150);
+}
+
+// ─── Post-render: inject Gap & Fulfill Rate cols into Booking vs Actual table ─
+function injectGapFulfillCols($tbl) {
+  // Add header cells before the grand-total col in thead
+  $tbl.find('thead tr').each(function() {
+    var $last = $(this).children().last();
+    $('<th class="pvtColLabel" style="background:#2c5aa0;color:#fff;">Gap (B−A)</th>').insertBefore($last);
+    $('<th class="pvtColLabel" style="background:#1a7a1a;color:#fff;">Fulfill Rate</th>').insertBefore($last);
+  });
+
+  // Add data cells before grand-total td in each tbody row
+  $tbl.find('tbody tr').each(function() {
+    var $last = $(this).children().last();
+    var $tds = $(this).find('td');
+    // $tds[0] = Sum of Booking TEU, $tds[1] = Sum of Actual TEU
+    var booking = parseFloat($tds.eq(0).text().replace(/,/g, '')) || 0;
+    var actual  = parseFloat($tds.eq(1).text().replace(/,/g, '')) || 0;
+    var gap     = booking - actual;
+    var fr      = booking > 0 ? ((actual / booking) * 100).toFixed(1) + '%' : '—';
+    var frColor = booking === 0 ? '#999' : (actual / booking >= 0.9 ? '#1a7a1a' : (actual / booking >= 0.7 ? '#8a6d00' : '#c00'));
+
+    var $gapTd  = $('<td style="font-weight:bold;text-align:right;">' + gap.toLocaleString() + '</td>').insertBefore($last);
+    var $frTd   = $('<td style="font-weight:bold;text-align:right;color:' + frColor + ';">' + fr + '</td>').insertBefore($last);
+
+    // Style Booking/Actual cells too
+    $tds.eq(0).css('text-align', 'right');
+    $tds.eq(1).css('text-align', 'right');
+  });
+
+  // Make row-label th cells sticky
+  $tbl.find('tbody th').css({ position: 'sticky', left: 0, zIndex: 5, background: '#fff' });
 }
 
 // ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
@@ -447,7 +447,8 @@ function initDashboard() {
     'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,        config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],   vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
     // Tab 4: Booking vs Actual — rows=Port only, cols=none, Booking+Actual TEU side-by-side
     'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026,  config: { rows: ['Port'],           cols: [],                        vals: ['Booking TEU', 'Actual TEU'], aggregatorName: 'Sum' } },
-    'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
+    // Booking TEU in Weekly Trend is shown in the summary TABLE above the chart — not in the pivot below
+    'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'], cols: [], vals: ['Actual TEU'], aggregatorName: 'Sum' } },
     // Tab 6-7: OB/IB — full data for VS LY; rows=Port+Lane, cols=ATD_Year
     'tab-outbound':      { divId: 'pv-outbound',       data: obTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
     'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
