@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Throughput Dashboard</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <!-- PivotTable.js CSS -->
   <link rel="stylesheet" href="https://unpkg.com/pivottable@2.23.0/dist/pivot.min.css">
   <style>
     * { box-sizing: border-box; }
@@ -24,46 +23,24 @@
     .pvtFilterBox { z-index: 9999; }
     .loading { text-align: center; padding: 80px; color: #666; font-size: 16px; }
     /* ── Sticky header & column ─────────────────────────────────────────── */
-    /* Column headers — sticky top */
     .pvtTable thead th {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: #f7f9fc;
+      position: sticky; top: 0; z-index: 10; background: #f7f9fc;
     }
-    /* Left row-label column — sticky left */
     .pvtTable tbody th {
-      position: sticky;
-      left: 0;
-      z-index: 5;
-      background: white;
+      position: sticky; left: 0; z-index: 5; background: white;
     }
-    /* Top-left cell: both top + left */
     .pvtTable thead th:first-child,
     .pvtTable thead th.pvtRowLabel {
-      position: sticky;
-      top: 0;
-      left: 0;
-      z-index: 20;
-      background: #f7f9fc;
+      position: sticky; top: 0; left: 0; z-index: 20; background: #f7f9fc;
     }
-    /* Row-total (right side) columns — sticky right */
     .pvtTable td.colTotal,
     .pvtTable th.colTotal {
-      position: sticky;
-      right: 0;
-      z-index: 6;
-      background: #fff8e1;
+      position: sticky; right: 0; z-index: 6; background: #fff8e1;
     }
-    /* Grand-total header cell — top + right */
     .pvtTable thead th.colTotal {
-      position: sticky;
-      top: 0;
-      right: 0;
-      z-index: 21;
-      background: #fff8e1;
+      position: sticky; top: 0; right: 0; z-index: 21; background: #fff8e1;
     }
-    /* Subtotal rows: "Σ XXXX Total" — highlight blue */
+    /* Subtotal rows: "Σ Port Total" — highlight blue */
     tr.subtotal-row td { background: #ddeeff !important; font-weight: bold; color: #1a3a6c; }
     tr.subtotal-row td:first-child { color: #1a3a6c; }
   </style>
@@ -108,7 +85,7 @@
     <!-- Tab 5: Weekly Trend -->
     <div class="tab-pane fade" id="tab-weekly-trend">
       <div class="chart-wrap"><canvas id="chart-weekly-canvas"></canvas></div>
-      <div id="weekly-summary-table" style="margin: 0 0 16px; font-size: 13px;"></div>
+      <div id="weekly-summary-table" style="margin:0 0 16px; font-size:13px;"></div>
       <div id="pv-weekly" class="pivot-wrap"></div>
     </div>
 
@@ -144,7 +121,7 @@
 
 let rawData = [];
 let weeklyChart = null;
-let pvInit = {}; // tabId -> boolean, whether pivot was already rendered
+let pvInit = {};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 function filterYear(data, year) {
@@ -166,7 +143,6 @@ function prevMonth(mo) {
 }
 
 function buildYoYMoM(baseData) {
-  // Aggregate by Port + ATD_Year + ATD Month
   var agg = {};
   baseData.forEach(function(r) {
     var port  = String(r['Port']       || '');
@@ -174,43 +150,25 @@ function buildYoYMoM(baseData) {
     var month = String(r['ATD Month']  || '');
     var k = port + '|' + year + '|' + month;
     if (!agg[k]) {
-      agg[k] = {
-        'Port': port, 'ATD_Year': year, 'ATD Month': month,
-        'Actual TEU': 0
-      };
+      agg[k] = { 'Port': port, 'ATD_Year': year, 'ATD Month': month, 'Actual TEU': 0 };
     }
     agg[k]['Actual TEU'] += (Number(r['Actual TEU']) || 0);
   });
-
-  // Build lookup map
   var valMap = {};
-  Object.keys(agg).forEach(function(k) {
-    valMap[k] = agg[k]['Actual TEU'];
-  });
-
+  Object.keys(agg).forEach(function(k) { valMap[k] = agg[k]['Actual TEU']; });
   return Object.values(agg).map(function(r) {
-    var port  = r['Port'];
-    var year  = r['ATD_Year'];
-    var month = r['ATD Month'];
-    var lyKey = port + '|' + prevYear(year) + '|' + month;
-    var lmKey = port + '|' + year + '|' + prevMonth(month);
-    var ly = valMap[lyKey] || 0;
-    var lm = valMap[lmKey] || 0;
-    r['VS LY']  = r['Actual TEU'] - ly;
-    r['VS LM']  = r['Actual TEU'] - lm;
+    var lyKey = r['Port'] + '|' + prevYear(r['ATD_Year']) + '|' + r['ATD Month'];
+    var lmKey = r['Port'] + '|' + r['ATD_Year'] + '|' + prevMonth(r['ATD Month']);
+    r['VS LY'] = r['Actual TEU'] - (valMap[lyKey] || 0);
+    r['VS LM'] = r['Actual TEU'] - (valMap[lmKey] || 0);
     return r;
   });
 }
 
 // ─── Inject Port / Lane Subtotal Rows ────────────────────────────────────────
-// For each group (e.g. each Port), inject a synthetic "AEJEA汇总" row containing the sum.
-// This makes PivotTable.js display a Port-total row after all its lanes.
 function injectSubtotals(data, groupByField) {
   if (!data || data.length === 0) return data;
-
-  var numFields = null;  // lazy-detect numeric fields from first row
-
-  // Group rows by the groupByField
+  var numFields = null;
   var groups = {};
   data.forEach(function(r) {
     var g = String(r[groupByField] || '');
@@ -218,11 +176,9 @@ function injectSubtotals(data, groupByField) {
     if (!groups[g]) groups[g] = [];
     groups[g].push(r);
   });
-
   var result = [];
   Object.keys(groups).sort().forEach(function(g) {
     var rows = groups[g];
-    // Detect numeric fields once
     if (!numFields) {
       numFields = {};
       Object.keys(rows[0]).forEach(function(k) {
@@ -230,107 +186,26 @@ function injectSubtotals(data, groupByField) {
         numFields[k] = (typeof v === 'number' || !isNaN(parseFloat(v))) && isFinite(v);
       });
     }
-    // Add all original rows
     rows.forEach(function(r) { result.push(r); });
-    // Add subtotal row: copy first row, override group key + lane + numeric sums
     var total = {};
     Object.keys(rows[0]).forEach(function(k) {
       if (k === groupByField) {
         total[k] = g;
       } else if (k === 'Lane') {
-        total[k] = 'Σ ' + g + ' Total';   // Σ (Sigma) sorts after all regular lanes alphabetically
+        total[k] = 'Σ ' + g + ' Total';
       } else if (numFields[k]) {
         total[k] = rows.reduce(function(s, r) { return s + (parseFloat(r[k]) || 0); }, 0);
       } else {
         total[k] = '';
       }
     });
-    total['_isSubtotal'] = true;  // marker for CSS
+    total['_isSubtotal'] = true;
     result.push(total);
   });
-
   return result;
 }
 
-// ─── Inject Gap + Fulfill Rate columns into Booking vs Actual pivot ───────────
-function injectGapFulfillCols($tbl) {
-  var $thead = $tbl.find('.pvtTable thead');
-  var $tbody = $tbl.find('.pvtTable tbody');
-
-  // Find Booking TEU and Actual TEU column indices by scanning header rows
-  var headerRows = $thead.find('tr');
-  var bookingIdx = -1, actualIdx = -1, valCount = 0;
-
-  headerRows.each(function(rIdx) {
-    $(this).find('th').each(function(cIdx) {
-      var txt = $(this).text().trim();
-      if (rIdx === 1 && /Booking TEU/i.test(txt)) bookingIdx = cIdx;
-      if (rIdx === 1 && /Actual TEU/i.test(txt)) actualIdx   = cIdx;
-    });
-  });
-
-  // Add header cells for new columns
-  var lastTh = $thead.find('tr:first th:last');
-  lastTh.after('<th style="background:#1a3a6c;color:#fff;">Gap</th>');
-  lastTh.next().after('<th style="background:#1a3a6c;color:#fff;">Fulfill Rate</th>');
-
-  // Add Gap + FulfillRate cells to each data row
-  $tbody.find('tr').each(function() {
-    var $tds = $(this).find('td');
-    var b = parseFloat($tds.eq(bookingIdx).text().replace(/,/g,'')) || 0;
-    var a = parseFloat($tds.eq(actualIdx).text().replace(/,/g,''))  || 0;
-    var gap = b - a;
-    var fr  = b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
-    var frColor = b === 0 ? '#999' : (a / b >= 0.9 ? '#1a7a1a' : a / b >= 0.7 ? '#8a6d00' : '#c00');
-    $tds.last().after(
-      '<td style="color:' + (gap < 0 ? '#c00' : '#333') + ';font-weight:bold;">' + (gap >= 0 ? '' : '−') + Math.abs(gap).toLocaleString() + '</td>' +
-      '<td style="color:' + frColor + ';font-weight:bold;">' + fr + '</td>'
-    );
-  });
-}
-
-// ─── PivotTable.js factory ───────────────────────────────────────────────────
-function makePivot(divId, data, cfg) {
-  var $el = $('#' + divId);
-  $el.empty();
-
-  var opts = {
-    data: data,
-    rows:       cfg.rows    || [],
-    cols:       cfg.cols    || [],
-    vals:       cfg.vals    || [],
-    aggregatorName: cfg.aggregatorName || 'Sum',
-    rendererName:   cfg.rendererName   || 'Table',
-    unusedAttrsVertical: false,
-    menuLimit: 3000,
-    // Note: PivotTable.js always sorts rows alphabetically.
-    // To force subtotal rows to appear LAST, use "Σ " prefix on Lane field
-    // (Σ sorts after all uppercase letters Z in ASCII, so "Σ AEJEA Total" always comes after "WAT").
-  };
-
-  // Post-process: inject Gap + Fulfill Rate columns for Booking vs Actual tab
-  if (divId === 'pv-booking-actual') {
-    setTimeout(function() { injectGapFulfillCols($el); }, 200);
-  }
-
-  $el.pivotUI(opts);
-
-  // Enhance: mark row-label th cells and subtotal rows
-  setTimeout(function() {
-    var $tbl = $el.find('.pvtTable');
-    $tbl.find('tbody th').addClass('pvtRowLabel');
-    $tbl.find('tbody tr').each(function() {
-      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
-    });
-
-    // ── Tab 4: Booking vs Actual — inject Gap & Fulfill Rate columns via DOM ──
-    if (divId === 'pv-booking-actual') {
-      injectGapFulfillCols($tbl);
-    }
-  }, 150);
-}
-
-// ─── Post-render: inject Gap & Fulfill Rate cols into Booking vs Actual table ─
+// ─── Inject Gap + Fulfill Rate columns (Tab 4 only) ───────────────────────
 function injectGapFulfillCols($tbl) {
   // Add header cells before the grand-total col in thead
   $tbl.find('thead tr').each(function() {
@@ -338,7 +213,6 @@ function injectGapFulfillCols($tbl) {
     $('<th class="pvtColLabel" style="background:#2c5aa0;color:#fff;">Gap (B−A)</th>').insertBefore($last);
     $('<th class="pvtColLabel" style="background:#1a7a1a;color:#fff;">Fulfill Rate</th>').insertBefore($last);
   });
-
   // Add data cells before grand-total td in each tbody row
   $tbl.find('tbody tr').each(function() {
     var $last = $(this).children().last();
@@ -349,20 +223,44 @@ function injectGapFulfillCols($tbl) {
     var gap     = booking - actual;
     var fr      = booking > 0 ? ((actual / booking) * 100).toFixed(1) + '%' : '—';
     var frColor = booking === 0 ? '#999' : (actual / booking >= 0.9 ? '#1a7a1a' : (actual / booking >= 0.7 ? '#8a6d00' : '#c00'));
-
-    var $gapTd  = $('<td style="font-weight:bold;text-align:right;">' + gap.toLocaleString() + '</td>').insertBefore($last);
-    var $frTd   = $('<td style="font-weight:bold;text-align:right;color:' + frColor + ';">' + fr + '</td>').insertBefore($last);
-
-    // Style Booking/Actual cells too
+    $('<td style="font-weight:bold;text-align:right;">' + (gap >= 0 ? '' : '−') + Math.abs(gap).toLocaleString() + '</td>').insertBefore($last);
+    $('<td style="font-weight:bold;text-align:right;color:' + frColor + ';">' + fr + '</td>').insertBefore($last);
     $tds.eq(0).css('text-align', 'right');
     $tds.eq(1).css('text-align', 'right');
   });
-
-  // Make row-label th cells sticky
   $tbl.find('tbody th').css({ position: 'sticky', left: 0, zIndex: 5, background: '#fff' });
 }
 
-// ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
+// ─── PivotTable.js factory ───────────────────────────────────────────────────
+function makePivot(divId, data, cfg) {
+  var $el = $('#' + divId);
+  $el.empty();
+  $el.pivotUI({
+    data: data,
+    rows:       cfg.rows    || [],
+    cols:       cfg.cols    || [],
+    vals:       cfg.vals    || [],
+    aggregatorName: cfg.aggregatorName || 'Sum',
+    rendererName:   cfg.rendererName   || 'Table',
+    unusedAttrsVertical: false,
+    menuLimit: 3000
+  });
+  // Post-render enhancements
+  var delay = (divId === 'pv-weekly') ? 200 : 150;
+  setTimeout(function() {
+    var $tbl = $el.find('.pvtTable');
+    if (!$tbl.length) return;
+    $tbl.find('tbody th').addClass('pvtRowLabel');
+    $tbl.find('tbody tr').each(function() {
+      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+    });
+    if (divId === 'pv-booking-actual') {
+      injectGapFulfillCols($tbl);
+    }
+  }, delay);
+}
+
+// ─── Weekly Chart (Chart.js) ───────────────────────────────────────────────
 function drawWeeklyChart() {
   var weekly = {};
   filterYear(rawData, 2026).forEach(function(r) {
@@ -372,7 +270,6 @@ function drawWeeklyChart() {
     weekly[w]['Actual TEU']  += (Number(r['Actual TEU'])  || 0);
     weekly[w]['Booking TEU'] += (Number(r['Booking TEU']) || 0);
   });
-
   var rows = Object.keys(weekly)
     .sort(function(a, b) {
       return parseInt((a || '').replace(/\D/g, '')) - parseInt((b || '').replace(/\D/g, ''));
@@ -380,16 +277,11 @@ function drawWeeklyChart() {
     .map(function(w) {
       return { Week: w, 'Actual TEU': weekly[w]['Actual TEU'], 'Booking TEU': weekly[w]['Booking TEU'] };
     });
-
-  // ─── Summary table below chart ─────────────────────────────────────────────
+  // Summary table below chart
   var $tblDiv = $('#weekly-summary-table');
   var totalActual = 0, totalBooking = 0;
-  rows.forEach(function(r) {
-    totalActual  += r['Actual TEU'];
-    totalBooking += r['Booking TEU'];
-  });
+  rows.forEach(function(r) { totalActual += r['Actual TEU']; totalBooking += r['Booking TEU']; });
   var fillRate = totalBooking > 0 ? ((totalActual / totalBooking) * 100).toFixed(1) + '%' : 'N/A';
-
   var html = '<table class="table table-bordered table-sm text-center" style="width:auto;margin:0 auto;table-layout:fixed;">';
   html += '<thead><tr style="background:#1a3a6c;color:#fff;">';
   html += '<th style="width:70px;">Week</th>';
@@ -417,7 +309,7 @@ function drawWeeklyChart() {
   html += '</tr></tbody></table>';
   $tblDiv.html(html);
 
-  // ─── Chart: Actual TEU only ─────────────────────────────────────────────────
+  // Chart: Actual TEU only
   var ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
   if (weeklyChart) weeklyChart.destroy();
   weeklyChart = new Chart(ctx, {
@@ -430,70 +322,41 @@ function drawWeeklyChart() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true },
-        tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.parsed.y.toLocaleString(); } } }
-      },
-      scales: {
-        x: { title: { display: true, text: 'Week' } },
-        y: { title: { display: true, text: 'TEU' }, beginAtZero: true }
-      }
+      plugins: { legend: { display: true }, tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.parsed.y.toLocaleString(); } } } },
+      scales: { x: { title: { display: true, text: 'Week' } }, y: { title: { display: true, text: 'TEU' }, beginAtZero: true } }
     }
   });
 }
 
 // ─── Init Dashboard ──────────────────────────────────────────────────────────
 function initDashboard() {
-
-  // Pre-compute OB / IB data
   var obData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'OUT' || r['TYPE'] === 'T/S OUT'; }));
   var ibData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'IN'  || r['TYPE'] === 'T/S IN';  }));
 
-  // Tab 1: Port x Month — render immediately (active tab)
-  // Add Port subtotal rows (Lane = "Σ AEJEA Total" etc.)
-  var dataWithPortTotals = injectSubtotals(filterYear(rawData, 2026), 'Port');
-  makePivot('pv-port-month', dataWithPortTotals, {
-    rows: ['Port', 'Lane'],
-    cols: ['ATD Month'],
-    vals: ['Actual TEU'],
-    aggregatorName: 'Sum'
-  });
-  pvInit['pv-port-month'] = true;
+  var data2026       = filterYear(rawData, 2026);
+  var portTotals2026 = injectSubtotals(data2026, 'Port');
+  var obTotals       = injectSubtotals(obData,  'Port');
+  var ibTotals       = injectSubtotals(ibData,  'Port');
 
-  // Weekly chart — draw once on init (Tab 5 is hidden, chart still renders)
+  var tabConfigs = {
+    'tab-port-month':    { divId: 'pv-port-month',    data: portTotals2026, config: { rows: ['Port'],          cols: [],                              vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
+    'tab-lane-month':    { divId: 'pv-lane-month',    data: data2026,      config: { rows: ['Lane'],         cols: ['ATD Month'],                  vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,      config: { rows: ['Port', 'Lane'],    cols: ['TYPE', 'Load Status'],       vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026, config: { rows: ['Port'],          cols: [],                              vals: ['Booking TEU', 'Actual TEU'], aggregatorName: 'Sum' } },
+    'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,      config: { rows: ['Week'],          cols: [],                              vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
+    'tab-outbound':      { divId: 'pv-outbound',       data: obTotals,      config: { rows: ['Port', 'Lane'], cols: ['ATD_Year'],                  vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
+    'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals,      config: { rows: ['Port', 'Lane'], cols: ['ATD_Year'],                  vals: ['Actual TEU'],                  aggregatorName: 'Sum' } }
+  };
+
+  // Render Tab 1 immediately (it is the active tab)
+  var cfg1 = tabConfigs['tab-port-month'];
+  makePivot(cfg1.divId, cfg1.data, cfg1.config);
+  pvInit[cfg1.divId] = true;
+
+  // Draw weekly chart once
   drawWeeklyChart();
 
   // Lazy render remaining tabs on first activation
-  // Pre-build data variants with subtotals (tabs 1-5 = 2026 only; tabs 6-7 = full data for VS LY)
-  var data2026        = filterYear(rawData, 2026);
-  var portTotals2026  = injectSubtotals(data2026, 'Port');
-  var obTotals        = injectSubtotals(obData,  'Port');
-  var ibTotals        = injectSubtotals(ibData,  'Port');
-
-  // Pre-build data variants (2026 only for tabs 1-5)
-  var data2026       = filterYear(rawData, 2026);
-  var portTotals2026 = injectSubtotals(data2026, 'Port');  // Tab 1: Port x Month (no col dims)
-  var obTotals       = injectSubtotals(obData, 'Port');     // Tab 6: OB
-  var ibTotals       = injectSubtotals(ibData, 'Port');     // Tab 7: IB
-
-  var tabConfigs = {
-    // Tab 1: Port x Month — rows=Port, no col dims, Σ per Port via injectSubtotals
-    'tab-port-month':    { divId: 'pv-port-month',    data: portTotals2026,  config: { rows: ['Port'],           cols: [],                        vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    // Tab 2: Lane x Month — keep ATD Month as col dim (no injectSubtotals since no Port)
-    'tab-lane-month':    { divId: 'pv-lane-month',    data: data2026,        config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    // Tab 3: Port x Lane x Type — has col dims (TYPE, Load Status) — no injectSubtotals,
-    // PivotTable.js auto-shows Port-column-totals on the right side.
-    'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,        config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],   vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    // Tab 4: Booking vs Actual — rows=Port only, cols=none, Booking+Actual TEU side-by-side
-    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026,  config: { rows: ['Port'],           cols: [],                        vals: ['Booking TEU', 'Actual TEU'], aggregatorName: 'Sum' } },
-    // Booking TEU in Weekly Trend is shown in the summary TABLE above the chart — not in the pivot below
-    'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'], cols: [], vals: ['Actual TEU'], aggregatorName: 'Sum' } },
-    // Tab 6-7: OB/IB — full data for VS LY; rows=Port+Lane, cols=ATD_Year
-    'tab-outbound':      { divId: 'pv-outbound',       data: obTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
-  };
-
-  // Listen to tab show events
   document.querySelectorAll('a[data-bs-toggle="tab"]').forEach(function(el) {
     el.addEventListener('shown.bs.tab', function(e) {
       var tabId = e.target.getAttribute('href').replace('#', '');
@@ -502,10 +365,7 @@ function initDashboard() {
         makePivot(cfg.divId, cfg.data, cfg.config);
         pvInit[cfg.divId] = true;
       }
-      // Redraw weekly chart every time tab-weekly-trend is activated
-      if (tabId === 'tab-weekly-trend') {
-        drawWeeklyChart();
-      }
+      if (tabId === 'tab-weekly-trend') drawWeeklyChart();
     });
   });
 }
