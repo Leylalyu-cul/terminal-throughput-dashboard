@@ -252,12 +252,44 @@ function injectSubtotals(data, groupByField) {
   return result;
 }
 
+// ─── Custom aggregators for Tab 4 (Booking vs Actual) ──────────────────────
+var customAggregators = {
+  'Gap (Booking - Actual)': function() {
+    return function(data, rowKey, colKey) {
+      var sumB = 0, sumA = 0;
+      data.forEach(function(r) {
+        sumB += parseFloat(r.Booking TEU') || 0;
+        sumA += parseFloat(r['Actual TEU']) || 0;
+      });
+      return {
+        value: function() { return sumB - sumA; },
+        format: function(x) { return x.toLocaleString(); },
+        numInputs: 0
+      };
+    };
+  },
+  'Fulfill Rate (Actual/Booking)': function() {
+    return function(data, rowKey, colKey) {
+      var sumB = 0, sumA = 0;
+      data.forEach(function(r) {
+        sumB += parseFloat(r.Booking TEU') || 0;
+        sumA += parseFloat(r['Actual TEU']) || 0;
+      });
+      return {
+        value: function() { return sumB === 0 ? 0 : sumA / sumB; },
+        format: function(x) { return (x * 100).toFixed(1) + '%'; },
+        numInputs: 0
+      };
+    };
+  }
+};
+
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
 function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
   $el.empty();
 
-  $el.pivotUI(data, {
+  var opts = {
     data: data,
     rows:       cfg.rows    || [],
     cols:       cfg.cols    || [],
@@ -269,7 +301,16 @@ function makePivot(divId, data, cfg) {
     // Note: PivotTable.js always sorts rows alphabetically.
     // To force subtotal rows to appear LAST, use "Σ " prefix on Lane field
     // (Σ sorts after all uppercase letters Z in ASCII, so "Σ AEJEA Total" always comes after "WAT").
-  });
+  };
+
+  // Inject custom aggregators only for Tab 4 (Booking vs Actual)
+  if (divId === 'pv-booking-actual') {
+    opts.aggregators = $.extend({}, $.pivotUtl.aggregators, customAggregators);
+    opts.vals = ['Booking TEU', 'Actual TEU', 'Gap (Booking - Actual)', 'Fulfill Rate (Actual/Booking)'];
+    opts.aggregatorName = 'Integer Sum'; // default for vals, overridden per-val internally
+  }
+
+  $el.pivotUI(opts);
 
   // Enhance: mark row-label th cells and colTotal cells for CSS sticky
   setTimeout(function() {
@@ -390,17 +431,26 @@ function initDashboard() {
   var obTotals        = injectSubtotals(obData,  'Port');
   var ibTotals        = injectSubtotals(ibData,  'Port');
 
+  // Pre-build data variants (2026 only for tabs 1-5)
+  var data2026       = filterYear(rawData, 2026);
+  var portTotals2026 = injectSubtotals(data2026, 'Port');  // Tab 1: Port x Month (no col dims)
+  var obTotals       = injectSubtotals(obData, 'Port');     // Tab 6: OB
+  var ibTotals       = injectSubtotals(ibData, 'Port');     // Tab 7: IB
+
   var tabConfigs = {
+    // Tab 1: Port x Month — rows=Port, no col dims, Σ per Port via injectSubtotals
+    'tab-port-month':    { divId: 'pv-port-month',    data: portTotals2026,  config: { rows: ['Port'],           cols: [],                        vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    // Tab 2: Lane x Month — keep ATD Month as col dim (no injectSubtotals since no Port)
     'tab-lane-month':    { divId: 'pv-lane-month',    data: data2026,        config: { rows: ['Lane'],           cols: ['ATD Month'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    // Tab 3 (Port x Lane x Type): has col dims (TYPE, Load Status) — skip injectSubtotals,
-    // PivotTable.js auto-shows Port-column-totals on the right side (no need for Σ rows).
-    'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,        config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],    vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    // Tab 4 (Booking vs Actual): has col dim (ATD Month) — same, no Σ injection needed.
-    'tab-booking-actual':{ divId: 'pv-booking-actual', data: data2026,        config:{ rows: ['Port', 'Lane'],   cols: ['ATD Month'],              vals: ['Booking TEU'], aggregatorName: 'Sum' } },
+    // Tab 3: Port x Lane x Type — has col dims (TYPE, Load Status) — no injectSubtotals,
+    // PivotTable.js auto-shows Port-column-totals on the right side.
+    'tab-port-lane-type':{ divId: 'pv-port-lane-type', data: data2026,        config: { rows: ['Port', 'Lane'],   cols: ['TYPE', 'Load Status'],   vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    // Tab 4: Booking vs Actual — rows=Port only, cols=none, Booking+Actual TEU side-by-side
+    'tab-booking-actual':{ divId: 'pv-booking-actual', data: portTotals2026,  config: { rows: ['Port'],           cols: [],                        vals: ['Booking TEU', 'Actual TEU'], aggregatorName: 'Sum' } },
     'tab-weekly-trend':  { divId: 'pv-weekly',         data: data2026,        config: { rows: ['Week'],           cols: [],                        vals: ['Actual TEU', 'Booking TEU'], aggregatorName: 'Sum' } },
-    // OB/IB keep full data (includes 2025 for VS LY calculation in buildYoYMoM)
-    'tab-outbound':      { divId: 'pv-outbound',       data: obTotals, config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
-    'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals, config: { rows: ['Port', 'Lane'],  cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
+    // Tab 6-7: OB/IB — full data for VS LY; rows=Port+Lane, cols=ATD_Year
+    'tab-outbound':      { divId: 'pv-outbound',       data: obTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } },
+    'tab-inbound':       { divId: 'pv-inbound',        data: ibTotals,        config: { rows: ['Port', 'Lane'],   cols: ['ATD_Year'],              vals: ['Actual TEU'],  aggregatorName: 'Sum' } }
   };
 
   // Listen to tab show events
