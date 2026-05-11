@@ -96,20 +96,17 @@
   </div><!-- /tab-content -->
 </div><!-- /container -->
 
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-<!-- JSZip -->
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<!-- jQuery (required by PivotTable.js) -->
+<!-- jQuery + jQuery UI + PivotTable.js must load BEFORE business code -->
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-<!-- jQuery UI (required for drag-drop) -->
 <script src="https://cdn.jsdelivr.net/npm/jquery-ui@1.13.2/dist/jquery-ui.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-ui@1.13.2/themes/smoothness/jquery-ui.min.css">
-<!-- PivotTable.js -->
 <script src="https://cdn.jsdelivr.net/npm/pivottable@2.23.0/dist/pivot.min.js"></script>
+<!-- Bootstrap + Chart.js + JSZip -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
+<!-- Business code: runs only AFTER all deps are ready -->
 <script>
 'use strict';
 
@@ -167,31 +164,48 @@ function buildYoYMoM(baseData) {
 function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
   $el.empty();
-  $el.pivotUI({
-    data: data,
-    rows:            cfg.rows           || [],
-    cols:            cfg.cols           || [],
-    vals:            cfg.vals           || [],
-    aggregatorName:  cfg.aggregatorName || 'Sum',
-    rendererName:    cfg.rendererName   || 'Table',
-    unusedAttrsVertical: false,
-    menuLimit: 3000
-  });
+
+  if (typeof $.pivotUI !== 'function') {
+    $el.html('<div class="loading" style="color:#dc3545">PivotTable.js 未加载（$.pivotUI undefined）。请检查网络或刷新重试。</div>');
+    console.error('PivotTable.js not loaded: $.pivotUI is', typeof $.pivotUI);
+    return;
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    $el.html('<div class="loading" style="color:#856404">数据为空（' + data.length + ' 条），无法渲染透视表。</div>');
+    console.warn('Empty data for', divId, data);
+    return;
+  }
+
+  try {
+    $el.pivotUI(data, {
+      rows:           cfg.rows           || [],
+      cols:           cfg.cols           || [],
+      vals:           cfg.vals           || [],
+      aggregatorName: cfg.aggregatorName || 'Sum',
+      rendererName:   cfg.rendererName   || 'Table',
+      menuLimit:      3000
+    }, true); // true = re-render (overwrite existing)
+  } catch (err) {
+    $el.html('<div class="loading" style="color:#dc3545">渲染失败：' + err.message + '</div>');
+    console.error('pivotUI error for', divId, err);
+    return;
+  }
+
   // Post-render enhancements
   var delay = (divId === 'pv-weekly') ? 300 : 200;
   setTimeout(function() {
     var $tbl = $el.find('.pvtTable');
-    if (!$tbl.length) return;
-    // Style row header column (sticky left)
+    if (!$tbl.length) {
+      console.warn('No .pvtTable found after render for', divId);
+      return;
+    }
     $tbl.find('tbody th').each(function() {
       $(this).css({ position: 'sticky', left: 0, zIndex: 5, background: '#fff' });
     });
-    // Style header row as sticky top
     $tbl.find('thead th').each(function(i) {
       var $th = $(this);
       $th.css({ position: 'sticky', top: 0, zIndex: (i === 0 ? 20 : 10), background: '#f7f9fc' });
     });
-
   }, delay);
 }
 
