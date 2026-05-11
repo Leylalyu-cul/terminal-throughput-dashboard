@@ -77,7 +77,7 @@
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-lane-month">Lane x Month</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-port-lane-type">Port x Lane x Type</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-booking-actual">Booking vs Actual</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">Weekly Trend</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-weekly-trend">2026 Weekly Trend</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-outbound">Outbound Report</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-inbound">Inbound Report</a></li>
   </ul>
@@ -283,7 +283,7 @@ function makePivot(divId, data, cfg) {
 // ─── Weekly Chart (Chart.js) ─────────────────────────────────────────────────
 function drawWeeklyChart() {
   var weekly = {};
-  rawData.forEach(function(r) {
+  filterYear(rawData, 2026).forEach(function(r) {
     var w = String(r['Week'] || '');
     if (!w) return;
     if (!weekly[w]) weekly[w] = { 'Actual TEU': 0, 'Booking TEU': 0 };
