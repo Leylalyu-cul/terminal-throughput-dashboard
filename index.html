@@ -13,7 +13,8 @@
     .tab-pane { min-height: 700px; padding: 16px; }
     .tab-content { border: 1px solid #dee2e6; border-top: none; background: #fff; }
     .pivot-wrap { width: 100%; min-height: 580px; overflow: auto; max-height: 70vh; }
-    #tab-weekly-trend .chart-wrap { width: 100%; height: 300px; margin-bottom: 16px; }
+    #tab-weekly-trend .chart-wrap { width: 100%; height: 280px; margin-bottom: 12px; }
+    #tab-weekly-trend .pivot-wrap { max-height: none; min-height: auto; overflow: visible; }
     .nav-tabs .nav-link { font-size: 14px; font-weight: 500; }
     /* PivotTable.js overrides */
     .pvtUi { font-size: 13px; }
@@ -107,6 +108,7 @@
     <!-- Tab 5: Weekly Trend -->
     <div class="tab-pane fade" id="tab-weekly-trend">
       <div class="chart-wrap"><canvas id="chart-weekly-canvas"></canvas></div>
+      <div id="weekly-summary-table" style="margin: 0 0 16px; font-size: 13px;"></div>
       <div id="pv-weekly" class="pivot-wrap"></div>
     </div>
 
@@ -302,6 +304,43 @@ function drawWeeklyChart() {
   var ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
   if (weeklyChart) weeklyChart.destroy();
   weeklyChart = new Chart(ctx, {
+
+  // ─── Summary table below chart ─────────────────────────────────────────────
+  var $tblDiv = $('#weekly-summary-table');
+  var totalActual = 0, totalBooking = 0;
+  rows.forEach(function(r) {
+    totalActual  += r['Actual TEU'];
+    totalBooking += r['Booking TEU'];
+  });
+  var fillRate = totalBooking > 0 ? ((totalActual / totalBooking) * 100).toFixed(1) + '%' : 'N/A';
+
+  var html = '<table class="table table-bordered table-sm text-center" style="width:auto;margin:0 auto;table-layout:fixed;">';
+  html += '<thead><tr style="background:#1a3a6c;color:#fff;">';
+  html += '<th style="width:70px;">Week</th>';
+  html += '<th style="width:110px;">Actual TEU</th>';
+  html += '<th style="width:120px;">Booking TEU</th>';
+  html += '<th style="width:90px;">Fill Rate</th>';
+  html += '<th style="width:110px;">Actual vs LY</th>';
+  html += '</tr></thead><tbody>';
+  rows.forEach(function(r) {
+    var fr = r['Booking TEU'] > 0 ? ((r['Actual TEU'] / r['Booking TEU']) * 100).toFixed(1) + '%' : '—';
+    html += '<tr>';
+    html += '<td style="font-weight:bold;">' + r.Week + '</td>';
+    html += '<td>' + r['Actual TEU'].toLocaleString() + '</td>';
+    html += '<td>' + r['Booking TEU'].toLocaleString() + '</td>';
+    html += '<td style="color:' + (fr === '—' ? '#999' : (parseFloat(fr) >= 90 ? '#1a7a1a' : parseFloat(fr) >= 70 ? '#8a6d00' : '#c00')) + ';">' + fr + '</td>';
+    html += '<td>—</td>'; // VS LY needs 2025 weekly data — placeholder
+    html += '</tr>';
+  });
+  // Totals row
+  html += '<tr style="background:#ddeeff;font-weight:bold;">';
+  html += '<td>Total</td>';
+  html += '<td>' + totalActual.toLocaleString() + '</td>';
+  html += '<td>' + totalBooking.toLocaleString() + '</td>';
+  html += '<td>' + fillRate + '</td>';
+  html += '<td>—</td>';
+  html += '</tr></tbody></table>';
+  $tblDiv.html(html);
     type: 'line',
     data: {
       labels: rows.map(function(r) { return r.Week; }),
