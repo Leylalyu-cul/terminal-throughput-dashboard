@@ -252,6 +252,43 @@ function injectSubtotals(data, groupByField) {
   return result;
 }
 
+// ─── Inject Gap + Fulfill Rate columns into Booking vs Actual pivot ───────────
+function injectGapFulfillCols($tbl) {
+  var $thead = $tbl.find('.pvtTable thead');
+  var $tbody = $tbl.find('.pvtTable tbody');
+
+  // Find Booking TEU and Actual TEU column indices by scanning header rows
+  var headerRows = $thead.find('tr');
+  var bookingIdx = -1, actualIdx = -1, valCount = 0;
+
+  headerRows.each(function(rIdx) {
+    $(this).find('th').each(function(cIdx) {
+      var txt = $(this).text().trim();
+      if (rIdx === 1 && /Booking TEU/i.test(txt)) bookingIdx = cIdx;
+      if (rIdx === 1 && /Actual TEU/i.test(txt)) actualIdx   = cIdx;
+    });
+  });
+
+  // Add header cells for new columns
+  var lastTh = $thead.find('tr:first th:last');
+  lastTh.after('<th style="background:#1a3a6c;color:#fff;">Gap</th>');
+  lastTh.next().after('<th style="background:#1a3a6c;color:#fff;">Fulfill Rate</th>');
+
+  // Add Gap + FulfillRate cells to each data row
+  $tbody.find('tr').each(function() {
+    var $tds = $(this).find('td');
+    var b = parseFloat($tds.eq(bookingIdx).text().replace(/,/g,'')) || 0;
+    var a = parseFloat($tds.eq(actualIdx).text().replace(/,/g,''))  || 0;
+    var gap = b - a;
+    var fr  = b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
+    var frColor = b === 0 ? '#999' : (a / b >= 0.9 ? '#1a7a1a' : a / b >= 0.7 ? '#8a6d00' : '#c00');
+    $tds.last().after(
+      '<td style="color:' + (gap < 0 ? '#c00' : '#333') + ';font-weight:bold;">' + (gap >= 0 ? '' : '−') + Math.abs(gap).toLocaleString() + '</td>' +
+      '<td style="color:' + frColor + ';font-weight:bold;">' + fr + '</td>'
+    );
+  });
+}
+
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
 function makePivot(divId, data, cfg) {
   var $el = $('#' + divId);
@@ -271,9 +308,11 @@ function makePivot(divId, data, cfg) {
     // (Σ sorts after all uppercase letters Z in ASCII, so "Σ AEJEA Total" always comes after "WAT").
   };
 
-  // Inject custom aggregators only for Tab 4 (Booking vs Actual)
+  // Post-process: inject Gap + Fulfill Rate columns for Booking vs Actual tab
   if (divId === 'pv-booking-actual') {
-    opts.aggregators = $.extend({}, $.pivotUtl.aggregators, customAggregators);
+    setTimeout(function() { injectGapFulfillCols($el); }, 200);
+  }
+
   $el.pivotUI(opts);
 
   // Enhance: mark row-label th cells and subtotal rows
