@@ -167,68 +167,41 @@ function buildYoYMoM(baseData) {
 
 // ─── Inject Port / Lane Subtotal Rows ────────────────────────────────────────
 function injectSubtotals(data, groupByField) {
-  if (!data || data.length === 0) return data;
-  var numFields = null;
-  var groups = {};
-  data.forEach(function(r) {
-    var g = String(r[groupByField] || '');
-    if (!g) return;
-    if (!groups[g]) groups[g] = [];
-    groups[g].push(r);
-  });
-  var result = [];
-  Object.keys(groups).sort().forEach(function(g) {
-    var rows = groups[g];
-    if (!numFields) {
-      numFields = {};
-      Object.keys(rows[0]).forEach(function(k) {
-        var v = rows[0][k];
-        numFields[k] = (typeof v === 'number' || !isNaN(parseFloat(v))) && isFinite(v);
-      });
-    }
-    rows.forEach(function(r) { result.push(r); });
-    var total = {};
-    Object.keys(rows[0]).forEach(function(k) {
-      if (k === groupByField) {
-        total[k] = g;
-      } else if (k === 'Lane') {
-        total[k] = 'Σ ' + g + ' Total';
-      } else if (numFields[k]) {
-        total[k] = rows.reduce(function(s, r) { return s + (parseFloat(r[k]) || 0); }, 0);
-      } else {
-        total[k] = '';
-      }
-    });
-    total['_isSubtotal'] = true;
-    result.push(total);
-  });
-  return result;
+  return data; // PivotTable.js 不支持手动注入小计行，直接返回原数据
 }
 
 // ─── Inject Gap + Fulfill Rate columns (Tab 4 only) ───────────────────────
 function injectGapFulfillCols($tbl) {
-  // Add header cells before the grand-total col in thead
-  $tbl.find('thead tr').each(function() {
-    var $last = $(this).children().last();
-    $('<th class="pvtColLabel" style="background:#2c5aa0;color:#fff;">Gap (B−A)</th>').insertBefore($last);
-    $('<th class="pvtColLabel" style="background:#1a7a1a;color:#fff;">Fulfill Rate</th>').insertBefore($last);
-  });
-  // Add data cells before grand-total td in each tbody row
+  // PivotTable.js renders: thead with col labels, tbody with row labels + value cells
+  // For rows=['Port'], cols=[], vals=['Booking TEU','Actual TEU']
+  // Structure: <tbody><tr><th>PortName</th><td>BookingVal</td><td>ActualVal</td><td>Total</td></tr>
+  var $headers = $tbl.find('thead th');
+  var colCount = $headers.length;
+  if (colCount < 2) return;
+
+  // Insert Gap and Fulfill Rate headers before the last header (Total)
+  $headers.eq(colCount - 1).before(
+    '<th class="pvtColLabel" style="background:#2c5aa0;color:#fff;">Gap (B−A)</th>' +
+    '<th class="pvtColLabel" style="background:#1a7a1a;color:#fff;">Fulfill Rate</th>'
+  );
+
   $tbl.find('tbody tr').each(function() {
-    var $last = $(this).children().last();
-    var $tds = $(this).find('td');
-    // $tds[0] = Sum of Booking TEU, $tds[1] = Sum of Actual TEU
-    var booking = parseFloat($tds.eq(0).text().replace(/,/g, '')) || 0;
-    var actual  = parseFloat($tds.eq(1).text().replace(/,/g, '')) || 0;
+    var $cells = $(this).children('td');
+    if ($cells.length < 2) return;
+    // td[0] = Booking TEU, td[1] = Actual TEU, td[2] = Total (sometimes)
+    var booking = parseFloat($cells.eq(0).text().replace(/,/g, '')) || 0;
+    var actual  = parseFloat($cells.eq(1).text().replace(/,/g, '')) || 0;
     var gap     = booking - actual;
     var fr      = booking > 0 ? ((actual / booking) * 100).toFixed(1) + '%' : '—';
     var frColor = booking === 0 ? '#999' : (actual / booking >= 0.9 ? '#1a7a1a' : (actual / booking >= 0.7 ? '#8a6d00' : '#c00'));
-    $('<td style="font-weight:bold;text-align:right;">' + (gap >= 0 ? '' : '−') + Math.abs(gap).toLocaleString() + '</td>').insertBefore($last);
+    var gapStr  = (gap >= 0 ? '' : '−') + Math.abs(gap).toLocaleString();
+    // Insert before last td (Total column)
+    var $last = $cells.last();
+    $('<td style="font-weight:bold;text-align:right;">' + gapStr + '</td>').insertBefore($last);
     $('<td style="font-weight:bold;text-align:right;color:' + frColor + ';">' + fr + '</td>').insertBefore($last);
-    $tds.eq(0).css('text-align', 'right');
-    $tds.eq(1).css('text-align', 'right');
+    $cells.eq(0).css('text-align', 'right');
+    $cells.eq(1).css('text-align', 'right');
   });
-  $tbl.find('tbody th').css({ position: 'sticky', left: 0, zIndex: 5, background: '#fff' });
 }
 
 // ─── PivotTable.js factory ───────────────────────────────────────────────────
@@ -237,22 +210,29 @@ function makePivot(divId, data, cfg) {
   $el.empty();
   $el.pivotUI({
     data: data,
-    rows:       cfg.rows    || [],
-    cols:       cfg.cols    || [],
-    vals:       cfg.vals    || [],
-    aggregatorName: cfg.aggregatorName || 'Sum',
-    rendererName:   cfg.rendererName   || 'Table',
+    rows:            cfg.rows           || [],
+    cols:            cfg.cols           || [],
+    vals:            cfg.vals           || [],
+    aggregatorName:  cfg.aggregatorName || 'Sum',
+    rendererName:    cfg.rendererName   || 'Table',
     unusedAttrsVertical: false,
-    menuLimit: 3000
+    menuLimit: 3000,
+    rowTotals:  true,
+    colTotals:  true
   });
   // Post-render enhancements
-  var delay = (divId === 'pv-weekly') ? 200 : 150;
+  var delay = (divId === 'pv-weekly') ? 300 : 200;
   setTimeout(function() {
     var $tbl = $el.find('.pvtTable');
     if (!$tbl.length) return;
-    $tbl.find('tbody th').addClass('pvtRowLabel');
-    $tbl.find('tbody tr').each(function() {
-      if (/Σ|Total|汇总/.test($(this).text())) $(this).addClass('subtotal-row');
+    // Style row header column (sticky left)
+    $tbl.find('tbody th').each(function() {
+      $(this).css({ position: 'sticky', left: 0, zIndex: 5, background: '#fff' });
+    });
+    // Style header row as sticky top
+    $tbl.find('thead th').each(function(i) {
+      var $th = $(this);
+      $th.css({ position: 'sticky', top: 0, zIndex: (i === 0 ? 20 : 10), background: '#f7f9fc' });
     });
     if (divId === 'pv-booking-actual') {
       injectGapFulfillCols($tbl);
