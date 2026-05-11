@@ -159,10 +159,7 @@ function buildYoYMoM(baseData) {
   });
 }
 
-// ─── Inject Port / Lane Subtotal Rows ────────────────────────────────────────
-function injectSubtotals(data, groupByField) {
-  return data; // PivotTable.js 不支持手动注入小计行，直接返回原数据
-}
+
 
 
 
@@ -178,9 +175,7 @@ function makePivot(divId, data, cfg) {
     aggregatorName:  cfg.aggregatorName || 'Sum',
     rendererName:    cfg.rendererName   || 'Table',
     unusedAttrsVertical: false,
-    menuLimit: 3000,
-    rowTotals:  true,
-    colTotals:  true
+    menuLimit: 3000
   });
   // Post-render enhancements
   var delay = (divId === 'pv-weekly') ? 300 : 200;
@@ -274,9 +269,9 @@ function initDashboard() {
   var ibData = buildYoYMoM(rawData.filter(function(r) { return r['TYPE'] === 'IN'  || r['TYPE'] === 'T/S IN';  }));
 
   var data2026       = filterYear(rawData, 2026);
-  var portTotals2026 = injectSubtotals(data2026, 'Port');
-  var obTotals       = injectSubtotals(obData,  'Port');
-  var ibTotals       = injectSubtotals(ibData,  'Port');
+  var portTotals2026 = data2026;
+  var obTotals       = obData;
+  var ibTotals       = ibData;
 
   var tabConfigs = {
     'tab-port-month':    { divId: 'pv-port-month',    data: portTotals2026, config: { rows: ['Port'],          cols: [],                              vals: ['Actual TEU'],                  aggregatorName: 'Sum' } },
