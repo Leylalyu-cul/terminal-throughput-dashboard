@@ -374,6 +374,10 @@ function initDashboard() {
         makePivot(cfg.divId, cfg.data, cfg.config);
         pvInit[cfg.divId] = true;
       }
+      // Redraw weekly chart every time tab-weekly-trend is activated
+      if (tabId === 'tab-weekly-trend') {
+        drawWeeklyChart();
+      }
     });
   });
 }
