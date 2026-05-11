@@ -301,10 +301,6 @@ function drawWeeklyChart() {
       return { Week: w, 'Actual TEU': weekly[w]['Actual TEU'], 'Booking TEU': weekly[w]['Booking TEU'] };
     });
 
-  var ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
-  if (weeklyChart) weeklyChart.destroy();
-  weeklyChart = new Chart(ctx, {
-
   // ─── Summary table below chart ─────────────────────────────────────────────
   var $tblDiv = $('#weekly-summary-table');
   var totalActual = 0, totalBooking = 0;
@@ -329,10 +325,9 @@ function drawWeeklyChart() {
     html += '<td>' + r['Actual TEU'].toLocaleString() + '</td>';
     html += '<td>' + r['Booking TEU'].toLocaleString() + '</td>';
     html += '<td style="color:' + (fr === '—' ? '#999' : (parseFloat(fr) >= 90 ? '#1a7a1a' : parseFloat(fr) >= 70 ? '#8a6d00' : '#c00')) + ';">' + fr + '</td>';
-    html += '<td>—</td>'; // VS LY needs 2025 weekly data — placeholder
+    html += '<td>—</td>';
     html += '</tr>';
   });
-  // Totals row
   html += '<tr style="background:#ddeeff;font-weight:bold;">';
   html += '<td>Total</td>';
   html += '<td>' + totalActual.toLocaleString() + '</td>';
@@ -341,12 +336,16 @@ function drawWeeklyChart() {
   html += '<td>—</td>';
   html += '</tr></tbody></table>';
   $tblDiv.html(html);
+
+  // ─── Chart: Actual TEU only ─────────────────────────────────────────────────
+  var ctx = document.getElementById('chart-weekly-canvas').getContext('2d');
+  if (weeklyChart) weeklyChart.destroy();
+  weeklyChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: rows.map(function(r) { return r.Week; }),
       datasets: [
-        { label: 'Actual TEU',  data: rows.map(function(r) { return r['Actual TEU'];  }), borderColor: '#2c5aa0', backgroundColor: 'rgba(44,90,160,0.1)', fill: true, tension: 0.3, pointRadius: 4 },
-        { label: 'Booking TEU', data: rows.map(function(r) { return r['Booking TEU']; }), borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
+        { label: 'Actual TEU', data: rows.map(function(r) { return r['Actual TEU']; }), borderColor: '#1a3a6c', backgroundColor: 'rgba(26,58,108,0.1)', fill: true, tension: 0.3, pointRadius: 4 }
       ]
     },
     options: {
@@ -356,8 +355,8 @@ function drawWeeklyChart() {
         tooltip: { callbacks: { label: function(c) { return c.dataset.label + ': ' + c.parsed.y.toLocaleString(); } } }
       },
       scales: {
-        y: { beginAtZero: true, title: { display: true, text: 'TEU' } },
-        x: { title: { display: true, text: 'Week' } }
+        x: { title: { display: true, text: 'Week' } },
+        y: { title: { display: true, text: 'TEU' }, beginAtZero: true }
       }
     }
   });
