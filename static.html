@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terminal Throughput Dashboard</title>
+<!-- Bootstrap 5 -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- SheetJS -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root { --bg-dark: #1a1a2e; --card-dark: #16213e; --accent: #0f3460; --text-muted: #a0a0b0; }
+body { background: #f0f2f5; font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+.navbar { background: linear-gradient(135deg, #1a1a2e, #16213e); }
+.navbar-brand { font-weight: 700; letter-spacing: 0.5px; }
+.nav-tabs .nav-link { color: #495057; font-weight: 500; border: none; padding: 10px 18px; }
+.nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; background: transparent; }
+.card { border: none; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 16px; }
+.card-header { background: white; border-bottom: 1px solid #eee; border-radius: 12px 12px 0 0 !important; font-weight: 600; padding: 14px 20px; }
+.card-body { padding: 20px; }
+.summary-card { text-align: center; padding: 20px; }
+.summary-card .number { font-size: 28px; font-weight: 700; color: #0d6efd; }
+.summary-card .label { font-size: 13px; color: #6c757d; margin-top: 4px; }
+.table-container { max-height: 600px; overflow-y: auto; }
+.table-container table { font-size: 13px; margin-bottom: 0; }
+.table-container thead { position: sticky; top: 0; z-index: 10; }
+.table-container thead th { background: #f8f9fa; border-top: none; }
+.table-hover tbody tr:hover { background: #e8f4fd; }
+.stat-row { font-variant-numeric: tabular-nums; }
+.treemap-ul { list-style: none; padding-left: 0; }
+.treemap-ul li { padding: 3px 0; font-size: 13px; }
+.region-badge { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.loading-overlay .spinner-border { width: 3rem; height: 3rem; }
+.search-box { max-width: 300px; }
+#weeklyChart { max-height: 400px; }
+.fulfill-rate { color: #198754; font-weight: 600; }
+.fulfill-rate.low { color: #dc3545; }
+  .badge-region { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+  .region-row { background: #e9ecef; cursor: pointer; }
+  .region-row:hover { background: #dee2e6; }
+  .region-toggle { display: inline-block; width: 16px; text-align: center; margin-right: 4px; font-size: 12px; }
+  .port-row { display: table-row; }
+  .port-row.collapsed { display: none; }
+  .subtotal-row { background: #f8f9fa; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark px-3 py-2">
+  <span class="navbar-brand">📊 Terminal Throughput Dashboard</span>
+  <span class="text-light" style="font-size:13px; opacity:0.7;" id="navInfo">加载中...</span>
+</nav>
+
+<div class="container-fluid px-3 py-3">
+
+  <!-- Summary Cards -->
+  <div class="row g-3 mb-3" id="summaryCards">
+    <div class="col-6 col-md-3">
+      <div class="card summary-card"><div class="number" id="sumTotal">-</div><div class="label">总货量 (TEU)</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card summary-card"><div class="number" id="sumBooking">-</div><div class="label">总订舱 (TEU)</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card summary-card"><div class="number" id="sumPorts">-</div><div class="label">港口数</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card summary-card"><div class="number" id="sumLanes">-</div><div class="label">航线数</div></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-target="#tabSource">原始数据</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabPortMonth">Port x Month</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabLaneMonth">Lane x Month</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabPortLaneType">Port x Lane x Type</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabWeekly">Weekly Trend</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabBooking">Booking vs Actual</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- Tab 0: Source Data -->
+    <div class="tab-pane active" id="tabSource">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>原始数据 <small class="text-muted" id="sourceCount"></small></span>
+          <div class="d-flex gap-2">
+            <input type="text" class="form-control form-control-sm search-box" id="sourceSearch" placeholder="搜索港口/航线...">
+            <select class="form-select form-select-sm" id="regionFilter" style="width:120px;">
+              <option value="">全部区域</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0">
+              <thead><tr id="sourceHeader"></tr></thead>
+              <tbody id="sourceBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 1: Port x Month -->
+    <div class="tab-pane" id="tabPortMonth">
+      <div class="card">
+        <div class="card-header">Port x Month — 按区域和港口汇总月度货量</div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0" id="portMonthTable">
+              <thead id="portMonthHeader"></thead>
+              <tbody id="portMonthBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Lane x Month -->
+    <div class="tab-pane" id="tabLaneMonth">
+      <div class="card">
+        <div class="card-header">Lane x Month — 按航线汇总月度货量</div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0" id="laneMonthTable">
+              <thead id="laneMonthHeader"></thead>
+              <tbody id="laneMonthBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Port x Lane x Type -->
+    <div class="tab-pane" id="tabPortLaneType">
+      <div class="card">
+        <div class="card-header">Port x Lane x Type — 按区域、港口、航线、箱型、重/空分类</div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0" id="portLaneTypeTable">
+              <thead id="portLaneTypeHeader"></thead>
+              <tbody id="portLaneTypeBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Weekly Trend -->
+    <div class="tab-pane" id="tabWeekly">
+      <div class="card">
+        <div class="card-header">Weekly Trend — 周度货量趋势</div>
+        <div class="card-body">
+          <canvas id="weeklyChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">周度明细表</div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0" id="weeklyTable">
+              <thead><tr><th>Week</th><th>Actual TEU</th></tr></thead>
+              <tbody id="weeklyBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Booking vs Actual -->
+    <div class="tab-pane" id="tabBooking">
+      <div class="card">
+        <div class="card-header">Booking vs Actual — 按区域、港口对比订舱与实际</div>
+        <div class="card-body p-0">
+          <div class="table-container">
+            <table class="table table-hover table-sm mb-0" id="bookingTable">
+              <thead id="bookingHeader"></thead>
+              <tbody id="bookingBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- tab-content -->
+</div><!-- container -->
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="text-center">
+    <div class="spinner-border text-primary mb-3" role="status"></div>
+    <div class="text-muted">正在加载吞吐量数据...</div>
+  </div>
+</div>
+
+<!-- Bootstrap JS for tabs -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+// ============================
+// 数据加载
+// ============================
+let data2026 = [];
+let weeklyChartInstance = null;
+
+async function loadData() {
+  try {
+    const resp = await fetch('data/data_2026.json');
+    data2026 = await resp.json();
+    document.getElementById('loadingOverlay').style.display = 'none';
+    renderAll();
+  } catch(e) {
+    // 降级：尝试用 SheetJS 解析 xlsx（如果 JSON 加载失败）
+    try {
+      const resp = await fetch('Terminal_Throughput_PivotTable_2025-2026_20260514_W20.xlsx');
+      const buf = await resp.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets['Pivot Source (2026)'];
+      data2026 = XLSX.utils.sheet_to_json(ws);
+      document.getElementById('loadingOverlay').style.display = 'none';
+      renderAll();
+    } catch(e2) {
+      document.getElementById('loadingOverlay').innerHTML = '<div class="text-danger">数据加载失败，请确认 data_2026.json 或 xlsx 文件存在</div>';
+    }
+  }
+}
+
+// ============================
+// 工具函数
+// ============================
+function sum(arr, key) { return arr.reduce((s, r) => s + (Number(r[key]) || 0), 0); }
+function toNum(v) { return Number(v) || 0; }
+function fmt(n) { return (n).toLocaleString(); }
+
+function groupBy(arr, keys, valKey) {
+  const map = {};
+  arr.forEach(r => {
+    const k = keys.map(k => r[k] ?? '').join('|||');
+    if (!map[k]) {
+      map[k] = { sum: 0, rows: [] };
+      keys.forEach(ke => { map[k][ke] = r[ke] ?? ''; });
+    }
+    map[k].sum += toNum(r[valKey]);
+    map[k].rows.push(r);
+  });
+  return Object.values(map).sort((a, b) => b.sum - a.sum);
+}
+
+function pivotTable(arr, rowKeys, colKey, valKey) {
+  const rowMap = {}, colSet = new Set();
+  arr.forEach(r => {
+    const rk = rowKeys.map(k => r[k] ?? '').join('|||');
+    const ck = r[colKey] ?? '';
+    colSet.add(ck);
+    if (!rowMap[rk]) { rowMap[rk] = { _row: rowKeys.map(k => r[k] ?? ''), _cols: {} }; }
+    rowMap[rk]._cols[ck] = (rowMap[rk]._cols[ck] || 0) + toNum(r[valKey]);
+  });
+  const cols = Array.from(colSet).sort();
+  const rows = Object.values(rowMap).sort((a, b) => {
+    const ta = cols.reduce((s, c) => s + (a._cols[c]||0), 0);
+    const tb = cols.reduce((s, c) => s + (b._cols[c]||0), 0);
+    return tb - ta;
+  });
+  return { rows, cols, rowKeys };
+}
+
+// ============================
+// 渲染
+// ============================
+function renderAll() {
+  const d = data2026;
+
+  // 摘要
+  const totalTEU = sum(d, 'Actual TEU');
+  const totalBkg = sum(d, 'Booking TEU');
+  const ports = new Set(d.map(r => r.Port));
+  const lanes = new Set(d.map(r => r.Lane));
+  document.getElementById('sumTotal').textContent = fmt(totalTEU);
+  document.getElementById('sumBooking').textContent = fmt(totalBkg);
+  document.getElementById('sumPorts').textContent = ports.size;
+  document.getElementById('sumLanes').textContent = lanes.size;
+  document.getElementById('navInfo').textContent = `${d.length} 条记录 · ${ports.size} 港口 · ${lanes.size} 航线`;
+
+  // 区域筛选下拉
+  const regions = [...new Set(d.map(r => r.Region))].sort();
+  const sel = document.getElementById('regionFilter');
+  regions.forEach(r => { sel.innerHTML += `<option value="${r}">${r}</option>`; });
+
+  renderSourceData(d);
+  renderPortMonth(d);
+  renderLaneMonth(d);
+  renderPortLaneType(d);
+  renderWeekly(d);
+  renderBooking(d);
+
+  // Tab 切换
+  document.querySelectorAll('#mainTabs .nav-link').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.querySelector(this.dataset.bsTarget).classList.add('active');
+      document.querySelectorAll('#mainTabs .nav-link').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      // 重新绘制图表
+      if (this.dataset.bsTarget === '#tabWeekly') renderWeekly(d);
+    });
+  });
+}
+
+// ---- Source Data ----
+function renderSourceData(d) {
+  const cols = ['Region','Port','Lane','TYPE','Load Status','ATD Month','Actual TEU','Booking TEU'];
+  const hdr = document.getElementById('sourceHeader');
+  hdr.innerHTML = cols.map(c => `<th>${c}</th>`).join('');
+  const tb = document.getElementById('sourceBody');
+
+  function render(filterRegion='', search='') {
+    let filtered = d;
+    if (filterRegion) filtered = filtered.filter(r => r.Region === filterRegion);
+    if (search) {
+      const s = search.toLowerCase();
+      filtered = filtered.filter(r => (r.Port+'').toLowerCase().includes(s) || (r.Lane+'').toLowerCase().includes(s));
+    }
+    document.getElementById('sourceCount').textContent = `(${filtered.length} 行)`;
+    tb.innerHTML = filtered.slice(0, 500).map(r => `<tr>${
+      cols.map(c => `<td>${r[c] ?? ''}</td>`).join('')
+    }</tr>`).join('');
+    if (filtered.length > 500) tb.innerHTML += `<tr><td colspan="${cols.length}" class="text-muted text-center">仅显示前 500 行，共 ${filtered.length} 行</td></tr>`;
+  }
+  render();
+
+  document.getElementById('sourceSearch').addEventListener('input', function() {
+    render(document.getElementById('regionFilter').value, this.value);
+  });
+  document.getElementById('regionFilter').addEventListener('change', function() {
+    render(this.value, document.getElementById('sourceSearch').value);
+  });
+}
+
+// ---- Port x Month ----
+function renderPortMonth(d) {
+  const piv = pivotTable(d, ['Region','Port'], 'ATD Month', 'Actual TEU');
+  const hdr = document.getElementById('portMonthHeader');
+  hdr.innerHTML = '<th>Region</th><th>Port</th>' + piv.cols.map(c => `<th>${c}</th>`).join('') + '<th>合计</th>';
+  const tb = document.getElementById('portMonthBody');
+
+  // Build hierarchy: Region → [Port items]
+  const regionMap = {};
+  piv.rows.forEach(r => {
+    const reg = r._row[0];
+    if (!regionMap[reg]) regionMap[reg] = { region: reg, items: [], months: {}, total: 0 };
+    regionMap[reg].items.push(r);
+    piv.cols.forEach(c => { regionMap[reg].months[c] = (regionMap[reg].months[c]||0) + (r._cols[c]||0); });
+    regionMap[reg].total += piv.cols.reduce((s,c) => s+(r._cols[c]||0), 0);
+  });
+
+  // Sort regions by total descending
+  const regions = Object.values(regionMap).sort((a, b) => b.total - a.total);
+  let idx = 0;
+  html = '';
+  regions.forEach(reg => {
+    const regCells = piv.cols.map(c => `<td class="text-end fw-bold">${reg.months[c] ? fmt(reg.months[c]) : '-'}</td>`);
+    html += `<tr class="region-row" data-target="pm${idx}">
+      <td colspan="2"><span class="region-toggle">▶</span><strong>${reg.region}</strong> <span class="text-muted" style="font-size:11px;">${reg.items.length} 港口</span></td>
+      ${regCells.join('')}<td class="text-end fw-bold">${fmt(reg.total)}</td></tr>`;
+    reg.items.forEach(r => {
+      const cells = piv.cols.map(c => `<td class="text-end">${r._cols[c] ? fmt(r._cols[c]) : '-'}</td>`);
+      const total = piv.cols.reduce((s,c) => s+(r._cols[c]||0), 0);
+      html += `<tr class="port-row pm${idx} collapsed"><td></td><td>${r._row[1]}</td>${cells.join('')}<td class="text-end">${fmt(total)}</td></tr>`;
+    });
+    idx++;
+  });
+  tb.innerHTML = html;
+
+  // Toggle handler
+  document.querySelectorAll('.region-row').forEach(row => {
+    row.addEventListener('click', function() {
+      const target = this.dataset.target;
+      const children = document.querySelectorAll('.' + target);
+      const isHidden = children[0]?.classList.contains('collapsed');
+      children.forEach(c => c.classList.toggle('collapsed'));
+      this.querySelector('.region-toggle').textContent = isHidden ? '▼' : '▶';
+    });
+  });
+}
+
+// ---- Lane x Month ----
+function renderLaneMonth(d) {
+  const piv = pivotTable(d, ['Lane'], 'ATD Month', 'Actual TEU');
+  const hdr = document.getElementById('laneMonthHeader');
+  hdr.innerHTML = '<th>Lane</th>' + piv.cols.map(c => `<th>${c}</th>`).join('') + '<th>合计</th>';
+  const tb = document.getElementById('laneMonthBody');
+  tb.innerHTML = piv.rows.map(r => {
+    const cells = piv.cols.map(c => `<td class="text-end">${r._cols[c] ? fmt(r._cols[c]) : '-'}</td>`);
+    const total = piv.cols.reduce((s,c) => s+(r._cols[c]||0), 0);
+    return `<tr><td><strong>${r._row[0]}</strong></td>${cells.join('')}<td class="text-end fw-bold">${fmt(total)}</td></tr>`;
+  }).join('');
+}
+
+// ---- Port x Lane x Type ----
+function renderPortLaneType(d) {
+  // Group by Region, Port, Lane, then pivot by TYPE + Load Status
+  const groups = {};
+  d.forEach(r => {
+    const key = [r.Region, r.Port, r.Lane].join('|||');
+    if (!groups[key]) groups[key] = { Region: r.Region, Port: r.Port, Lane: r.Lane, sub: {} };
+    const subKey = `${r.TYPE}|${r['Load Status']}`;
+    groups[key].sub[subKey] = (groups[key].sub[subKey] || 0) + toNum(r['Actual TEU']);
+  });
+
+  // Collect unique TYPE|LoadStatus combinations
+  const allSubKeys = new Set();
+  Object.values(groups).forEach(g => { Object.keys(g.sub).forEach(k => allSubKeys.add(k)); });
+  const subKeys = [...allSubKeys].sort();
+
+  const hdr = document.getElementById('portLaneTypeHeader');
+  hdr.innerHTML = '<th>Region</th><th>Port</th><th>Lane</th>' + subKeys.map(k => `<th>${k.replace('|', '<br>')}</th>`).join('') + '<th>合计</th>';
+
+  // Group into Region hierarchy
+  const regionMap = {};
+  Object.values(groups).forEach(g => {
+    if (!regionMap[g.Region]) regionMap[g.Region] = { region: g.Region, ports: {} };
+    if (!regionMap[g.Region].ports[g.Port]) regionMap[g.Region].ports[g.Port] = { port: g.Port, items: [] };
+    regionMap[g.Region].ports[g.Port].items.push(g);
+  });
+
+  // Sort: regions by total desc, ports by total desc, items by total desc
+  const regions = Object.values(regionMap).map(r => {
+    const portArr = Object.values(r.ports).map(p => {
+      p.total = p.items.reduce((s, g) => s + subKeys.reduce((t,k) => t+(g.sub[k]||0),0), 0);
+      p.items.sort((a,b) => {
+        const ta = subKeys.reduce((s,k)=>s+(a.sub[k]||0),0);
+        const tb = subKeys.reduce((s,k)=>s+(b.sub[k]||0),0);
+        return tb - ta;
+      });
+      return p;
+    }).sort((a, b) => b.total - a.total);
+    r.portArr = portArr;
+    r.total = portArr.reduce((s, p) => s + p.total, 0);
+    return r;
+  }).sort((a, b) => b.total - a.total);
+
+  const tb = document.getElementById('portLaneTypeBody');
+  let html = '';
+  let idx = 0;
+
+  regions.forEach(r => {
+    const regCells = subKeys.map(k => {
+      const v = r.portArr.reduce((s, p) => s + p.items.reduce((t, g) => t+(g.sub[k]||0),0), 0);
+      return `<td class="text-end fw-bold">${v ? fmt(v) : '-'}</td>`;
+    });
+    html += `<tr class="region-row" data-target="plt${idx}">
+      <td colspan="3"><span class="region-toggle">▶</span><strong>${r.region}</strong> <span class="text-muted" style="font-size:11px;">${r.portArr.length} 港口</span></td>
+      ${regCells.join('')}<td class="text-end fw-bold">${fmt(r.total)}</td></tr>`;
+
+    let pIdx = 0;
+    r.portArr.forEach(p => {
+      const portCells = subKeys.map(k => {
+        const v = p.items.reduce((t, g) => t+(g.sub[k]||0),0);
+        return `<td class="text-end">${v ? fmt(v) : '-'}</td>`;
+      });
+      const pTotal = p.items.reduce((s, g) => s + subKeys.reduce((t,k) => t+(g.sub[k]||0),0), 0);
+      html += `<tr class="port-row plt${idx} collapsed"><td></td><td>${p.port}</td><td></td>
+        ${portCells.join('')}<td class="text-end">${fmt(pTotal)}</td></tr>`;
+
+      p.items.forEach(g => {
+        const cells = subKeys.map(k => `<td class="text-end">${g.sub[k] ? fmt(g.sub[k]) : '-'}</td>`);
+        const total = subKeys.reduce((s,k) => s+(g.sub[k]||0), 0);
+        html += `<tr class="port-row plt${idx} collapsed" style="font-size:12px; color:#666;">
+          <td></td><td></td><td>${g.Lane}</td>${cells.join('')}<td class="text-end">${fmt(total)}</td></tr>`;
+      });
+      pIdx++;
+    });
+    idx++;
+  });
+  tb.innerHTML = html;
+
+  document.querySelectorAll('.region-row').forEach(row => {
+    row.addEventListener('click', function() {
+      const target = this.dataset.target;
+      document.querySelectorAll('.' + target).forEach(c => c.classList.toggle('collapsed'));
+      this.querySelector('.region-toggle').textContent =
+        this.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
+    });
+  });
+}
+
+// ---- Weekly Trend ----
+function renderWeekly(d) {
+  const weekly = groupBy(d, ['Week'], 'Actual TEU');
+  const tb = document.getElementById('weeklyBody');
+  tb.innerHTML = weekly.map(r => `<tr><td>${r.Week}</td><td class="text-end">${fmt(r.sum)}</td></tr>`).join('');
+
+  // Chart
+  const labels = weekly.map(r => r.Week).reverse();
+  const values = weekly.map(r => r.sum).reverse();
+
+  if (weeklyChartInstance) weeklyChartInstance.destroy();
+  const ctx = document.getElementById('weeklyChart').getContext('2d');
+  weeklyChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Actual TEU',
+        data: values,
+        borderColor: '#0d6efd',
+        backgroundColor: 'rgba(13,110,253,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => fmt(ctx.parsed.y) + ' TEU' } }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Week' } },
+        y: { title: { display: true, text: 'TEU' }, ticks: { callback: v => fmt(v) } }
+      }
+    }
+  });
+}
+
+// ---- Booking vs Actual ----
+function renderBooking(d) {
+  const hdr = document.getElementById('bookingHeader');
+  hdr.innerHTML = '<th>Region</th><th>Port</th><th>Booking TEU</th><th>Actual TEU</th><th>Gap</th><th>Fulfill Rate</th>';
+
+  const groups = {};
+  d.forEach(r => {
+    const key = [r.Region, r.Port].join('|||');
+    if (!groups[key]) groups[key] = { Region: r.Region, Port: r.Port, booking: 0, actual: 0, count: 0 };
+    groups[key].booking += toNum(r['Booking TEU']);
+    groups[key].actual += toNum(r['Actual TEU']);
+    groups[key].count++;
+  });
+
+  // Build Region hierarchy
+  const regionMap = {};
+  Object.values(groups).forEach(g => {
+    if (!regionMap[g.Region]) regionMap[g.Region] = { region: g.Region, ports: [] };
+    regionMap[g.Region].ports.push(g);
+  });
+
+  // Sort: region by actual desc, port by actual desc
+  const regions = Object.values(regionMap).map(r => {
+    r.ports.sort((a, b) => b.actual - a.actual);
+    r.booking = r.ports.reduce((s, p) => s + p.booking, 0);
+    r.actual = r.ports.reduce((s, p) => s + p.actual, 0);
+    r.total = r.actual;
+    return r;
+  }).sort((a, b) => b.actual - a.actual);
+
+  const tb = document.getElementById('bookingBody');
+  let html = '';
+  let idx = 0;
+
+  regions.forEach(r => {
+    const regRate = r.booking > 0 ? (r.actual / r.booking * 100) : 0;
+    html += `<tr class="region-row" data-target="bkg${idx}">
+      <td colspan="2"><span class="region-toggle">▶</span><strong>${r.region}</strong> <span class="text-muted" style="font-size:11px;">${r.ports.length} 港口</span></td>
+      <td class="text-end fw-bold">${fmt(r.booking)}</td>
+      <td class="text-end fw-bold">${fmt(r.actual)}</td>
+      <td class="text-end fw-bold ${r.actual >= r.booking ? 'text-success' : 'text-danger'}">${fmt(r.actual - r.booking)}</td>
+      <td class="text-end fw-bold">${regRate.toFixed(1)}%</td></tr>`;
+
+    r.ports.forEach(p => {
+      const gap = p.actual - p.booking;
+      const rate = p.booking > 0 ? (p.actual / p.booking * 100) : 0;
+      html += `<tr class="port-row bkg${idx} collapsed">
+        <td></td><td>${p.Port}</td>
+        <td class="text-end">${fmt(p.booking)}</td>
+        <td class="text-end">${fmt(p.actual)}</td>
+        <td class="text-end ${gap >= 0 ? 'text-success' : 'text-danger'}">${gap >= 0 ? '+' : ''}${fmt(gap)}</td>
+        <td class="text-end"><span class="${rate < 80 ? 'fulfill-rate low' : 'fulfill-rate'}">${rate.toFixed(1)}%</span></td>
+      </tr>`;
+    });
+    idx++;
+  });
+  tb.innerHTML = html;
+
+  document.querySelectorAll('.region-row').forEach(row => {
+    row.addEventListener('click', function() {
+      const target = this.dataset.target;
+      document.querySelectorAll('.' + target).forEach(c => c.classList.toggle('collapsed'));
+      this.querySelector('.region-toggle').textContent =
+        this.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
+    });
+  });
+}
+
+// ============================
+// 启动
+// ============================
+loadData();
+</script>
+</body>
+</html>
