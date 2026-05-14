@@ -346,11 +346,9 @@ function renderSourceData(d) {
 // ---- Port x Month ----
 function renderPortMonth(d) {
   const piv = pivotTable(d, ['Region','Port'], 'ATD Month', 'Actual TEU');
-  const hdr = document.getElementById('portMonthHeader');
-  hdr.innerHTML = '<th>Region</th><th>Port</th>' + piv.cols.map(c => `<th>${c}</th>`).join('') + '<th>合计</th>';
+  document.getElementById('portMonthHeader').innerHTML = '<th>Region</th><th>Port</th>' + piv.cols.map(c => `<th>${c}</th>`).join('') + '<th>合计</th>';
   const tb = document.getElementById('portMonthBody');
 
-  // Build hierarchy: Region → [Port items]
   const regionMap = {};
   piv.rows.forEach(r => {
     const reg = r._row[0];
@@ -360,34 +358,33 @@ function renderPortMonth(d) {
     regionMap[reg].total += piv.cols.reduce((s,c) => s+(r._cols[c]||0), 0);
   });
 
-  // Sort regions by total descending
   const regions = Object.values(regionMap).sort((a, b) => b.total - a.total);
-  let idx = 0;
-  html = '';
+  let i = 0, h = '';
   regions.forEach(reg => {
-    const regCells = piv.cols.map(c => `<td class="text-end fw-bold">${reg.months[c] ? fmt(reg.months[c]) : '-'}</td>`);
-    html += `<tr class="region-row" data-target="pm${idx}">
-      <td colspan="2"><span class="region-toggle">▶</span><strong>${reg.region}</strong> <span class="text-muted" style="font-size:11px;">${reg.items.length} 港口</span></td>
-      ${regCells.join('')}<td class="text-end fw-bold">${fmt(reg.total)}</td></tr>`;
+    const rc = piv.cols.map(c => `<td class="text-end fw-bold">${reg.months[c] ? fmt(reg.months[c]) : '-'}</td>`);
+    h += `<tr class="region-row" data-target="pm${i}"><td colspan="2"><span class="region-toggle">▶</span><strong>${reg.region}</strong> <span class="text-muted" style="font-size:11px;">${reg.items.length} 港口</span></td>${rc.join('')}<td class="text-end fw-bold">${fmt(reg.total)}</td></tr>`;
     reg.items.forEach(r => {
       const cells = piv.cols.map(c => `<td class="text-end">${r._cols[c] ? fmt(r._cols[c]) : '-'}</td>`);
       const total = piv.cols.reduce((s,c) => s+(r._cols[c]||0), 0);
-      html += `<tr class="port-row pm${idx} collapsed"><td></td><td>${r._row[1]}</td>${cells.join('')}<td class="text-end">${fmt(total)}</td></tr>`;
+      h += `<tr class="port-row pm${i} collapsed"><td></td><td>${r._row[1]}</td>${cells.join('')}<td class="text-end">${fmt(total)}</td></tr>`;
     });
-    idx++;
+    i++;
   });
-  tb.innerHTML = html;
+  tb.innerHTML = h;
 
-  // Toggle handler
-  document.querySelectorAll('.region-row').forEach(row => {
-    row.addEventListener('click', function() {
-      const target = this.dataset.target;
+  // 事件委托（只绑一次）
+  if (!tb._delegated) {
+    tb._delegated = true;
+    tb.addEventListener('click', function(e) {
+      const row = e.target.closest('.region-row');
+      if (!row) return;
+      const target = row.dataset.target;
       const children = document.querySelectorAll('.' + target);
-      const isHidden = children[0]?.classList.contains('collapsed');
       children.forEach(c => c.classList.toggle('collapsed'));
-      this.querySelector('.region-toggle').textContent = isHidden ? '▼' : '▶';
+      row.querySelector('.region-toggle').textContent =
+        row.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
     });
-  });
+  }
 }
 
 // ---- Lane x Month ----
@@ -481,14 +478,18 @@ function renderPortLaneType(d) {
   });
   tb.innerHTML = html;
 
-  document.querySelectorAll('.region-row').forEach(row => {
-    row.addEventListener('click', function() {
-      const target = this.dataset.target;
+  // 事件委托
+  if (!tb._delegated) {
+    tb._delegated = true;
+    tb.addEventListener('click', function(e) {
+      const row = e.target.closest('.region-row');
+      if (!row) return;
+      const target = row.dataset.target;
       document.querySelectorAll('.' + target).forEach(c => c.classList.toggle('collapsed'));
-      this.querySelector('.region-toggle').textContent =
-        this.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
+      row.querySelector('.region-toggle').textContent =
+        row.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
     });
-  });
+  }
 }
 
 // ---- Weekly Trend ----
@@ -591,14 +592,17 @@ function renderBooking(d) {
   });
   tb.innerHTML = html;
 
-  document.querySelectorAll('.region-row').forEach(row => {
-    row.addEventListener('click', function() {
-      const target = this.dataset.target;
+  if (!tb._delegated) {
+    tb._delegated = true;
+    tb.addEventListener('click', function(e) {
+      const row = e.target.closest('.region-row');
+      if (!row) return;
+      const target = row.dataset.target;
       document.querySelectorAll('.' + target).forEach(c => c.classList.toggle('collapsed'));
-      this.querySelector('.region-toggle').textContent =
-        this.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
+      row.querySelector('.region-toggle').textContent =
+        row.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
     });
-  });
+  }
 }
 
 // ============================
