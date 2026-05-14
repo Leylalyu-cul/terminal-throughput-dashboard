@@ -495,12 +495,19 @@ function renderPortLaneType(d) {
 // ---- Weekly Trend ----
 function renderWeekly(d) {
   const weekly = groupBy(d, ['Week'], 'Actual TEU');
+  // 按 Week 数值升序排列
+  weekly.sort((a, b) => {
+    const wa = parseInt(a.Week, 10) || 0;
+    const wb = parseInt(b.Week, 10) || 0;
+    return wa - wb;
+  });
+
   const tb = document.getElementById('weeklyBody');
   tb.innerHTML = weekly.map(r => `<tr><td>${r.Week}</td><td class="text-end">${fmt(r.sum)}</td></tr>`).join('');
 
   // Chart
-  const labels = weekly.map(r => r.Week).reverse();
-  const values = weekly.map(r => r.sum).reverse();
+  const labels = weekly.map(r => r.Week);
+  const values = weekly.map(r => r.sum);
 
   if (weeklyChartInstance) weeklyChartInstance.destroy();
   const ctx = document.getElementById('weeklyChart').getContext('2d');
