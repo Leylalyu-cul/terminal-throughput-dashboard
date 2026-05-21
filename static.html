@@ -525,7 +525,12 @@ function setupTabs() {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      document.getElementById(this.dataset.tab).classList.add('active');
+      const pane = document.getElementById(this.dataset.tab);
+      pane.classList.add('active');
+      // 滚动到内容区域顶部（标签栏下方）
+      const wrapper = document.querySelector('.tab-content-wrapper');
+      const offset = wrapper.getBoundingClientRect().top + window.pageYOffset - 80;
+      window.scrollTo({ top: offset, behavior: 'smooth' });
       if (this.dataset.tab === 'tabWeekly') renderWeekly(data2026);
     });
   });
