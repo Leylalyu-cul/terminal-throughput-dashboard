@@ -77,6 +77,7 @@ body { background: #f0f2f5; font-family: -apple-system, 'Segoe UI', 'PingFang SC
   <ul class="nav nav-tabs mb-3" id="mainTabs" role="tablist">
     <li class="nav-item"><button class="nav-link active" data-bs-target="#tabSource">原始数据</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-target="#tabPortMonth">Port x Month</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-target="#tabYoyMom">同比/环比</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-target="#tabLaneMonth">Lane x Month</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-target="#tabPortLaneType">Port x Lane x Type</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-target="#tabWeekly">Weekly Trend</button></li>
@@ -117,6 +118,21 @@ body { background: #f0f2f5; font-family: -apple-system, 'Segoe UI', 'PingFang SC
             <table class="table table-hover table-sm mb-0" id="portMonthTable">
               <thead id="portMonthHeader"></thead>
               <tbody id="portMonthBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 1b: 同比/环比 -->
+    <div class="tab-pane" id="tabYoyMom">
+      <div class="card">
+        <div class="card-header">Port x Month — 同比上年 / 环比上月（2026年）</div>
+        <div class="card-body p-0">
+          <div class="table-container" style="overflow-x:auto;">
+            <table class="table table-hover table-sm mb-0" id="yoyMomTable" style="min-width:1400px;">
+              <thead id="yoyMomHeader"></thead>
+              <tbody id="yoyMomBody"></tbody>
             </table>
           </div>
         </div>
@@ -208,12 +224,17 @@ body { background: #f0f2f5; font-family: -apple-system, 'Segoe UI', 'PingFang SC
 // 数据加载
 // ============================
 let data2026 = [];
+let yoyMomData = [];
 let weeklyChartInstance = null;
 
 async function loadData() {
   try {
-    const resp = await fetch('data/data_2026.json');
-    data2026 = await resp.json();
+    const [r1, r2] = await Promise.all([
+      fetch('data/data_2026.json').then(r => r.json()),
+      fetch('data/data_yoy_mom.json').then(r => r.json())
+    ]);
+    data2026 = r1;
+    yoyMomData = r2;
     document.getElementById('loadingOverlay').style.display = 'none';
     renderAll();
   } catch(e) {
@@ -295,6 +316,7 @@ function renderAll() {
 
   renderSourceData(d);
   renderPortMonth(d);
+  renderYoyMom(yoyMomData);
   renderLaneMonth(d);
   renderPortLaneType(d);
   renderWeekly(d);
@@ -381,6 +403,95 @@ function renderPortMonth(d) {
       const target = row.dataset.target;
       const children = document.querySelectorAll('.' + target);
       children.forEach(c => c.classList.toggle('collapsed'));
+      row.querySelector('.region-toggle').textContent =
+        row.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
+    });
+  }
+}
+
+// ---- 同比/环比 ----
+function renderYoyMom(d) {
+  const months = [1,2,3,4,5,6,7,8,9,10,11,12];
+  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  const hdr = document.getElementById('yoyMomHeader');
+  let headerHtml = '<th>Region</th><th>Port</th>';
+  months.forEach((m, i) => {
+    headerHtml += `<th>${monthNames[i]} TEU</th><th>同比</th><th>环比</th>`;
+  });
+  hdr.innerHTML = headerHtml;
+
+  // Group by region
+  const regionMap = {};
+  d.forEach(item => {
+    if (!regionMap[item.region]) regionMap[item.region] = { region: item.region, ports: [] };
+    regionMap[item.region].ports.push(item);
+  });
+
+  // Sort regions by total 2026 TEU desc
+  const regions = Object.values(regionMap).map(r => {
+    r.ports.sort((a, b) => {
+      const ta = months.reduce((s, m) => s + ((b['2026'] && b['2026'][m]) || 0), 0);
+      const tb = months.reduce((s, m) => s + ((a['2026'] && a['2026'][m]) || 0), 0);
+      return ta - tb;
+    });
+    r.total = r.ports.reduce((s, p) => s + months.reduce((t, m) => t + ((p['2026'] && p['2026'][m]) || 0), 0), 0);
+    return r;
+  }).sort((a, b) => b.total - a.total);
+
+  const tb = document.getElementById('yoyMomBody');
+  let html = '';
+  let idx = 0;
+
+  regions.forEach(r => {
+    // Region subtotal row
+    let regCells = '';
+    months.forEach(m => {
+      const v26 = r.ports.reduce((s, p) => s + ((p['2026'] && p['2026'][m]) || 0), 0);
+      const v25 = r.ports.reduce((s, p) => s + ((p['2025'] && p['2025'][m]) || 0), 0);
+      // Previous month for MoM
+      const prevM = m === 1 ? 0 : months[m-2]; // m=1 has no prev
+      const vPrev = (prevM > 0) ? r.ports.reduce((s, p) => s + ((p['2026'] && p['2026'][prevM]) || 0), 0) : 0;
+
+      const yoy = v25 > 0 ? ((v26 - v25) / v25 * 100) : null;
+      const mom = vPrev > 0 ? ((v26 - vPrev) / vPrev * 100) : null;
+
+      regCells += `<td class="text-end fw-bold">${v26 ? fmt(Math.round(v26)) : '-'}</td>`;
+      regCells += `<td class="text-end fw-bold ${yoy === null ? '' : (yoy >= 0 ? 'text-success' : 'text-danger')}">${yoy !== null ? (yoy >= 0 ? '+' : '') + yoy.toFixed(1) + '%' : '-'}</td>`;
+      regCells += `<td class="text-end fw-bold ${mom === null ? '' : (mom >= 0 ? 'text-success' : 'text-danger')}">${mom !== null ? (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%' : '-'}</td>`;
+    });
+    html += `<tr class="region-row" data-target="ym${idx}">
+      <td colspan="2"><span class="region-toggle">▶</span><strong>${r.region}</strong> <span class="text-muted" style="font-size:11px;">${r.ports.length} 港口</span></td>
+      ${regCells}</tr>`;
+
+    // Port rows
+    r.ports.forEach(p => {
+      // Previous month tracking for MoM at port level
+      let prevTEU = 0;
+      let cells = '';
+      months.forEach(m => {
+        const v26 = (p['2026'] && p['2026'][m]) || 0;
+        const v25 = (p['2025'] && p['2025'][m]) || 0;
+        const yoy = v25 > 0 ? ((v26 - v25) / v25 * 100) : null;
+        const mom = prevTEU > 0 ? ((v26 - prevTEU) / prevTEU * 100) : null;
+        cells += `<td class="text-end">${v26 ? fmt(Math.round(v26)) : '-'}</td>`;
+        cells += `<td class="text-end ${yoy === null ? '' : (yoy >= 0 ? 'text-success' : 'text-danger')}" style="font-size:11px;">${yoy !== null ? (yoy >= 0 ? '+' : '') + yoy.toFixed(1) + '%' : '-'}</td>`;
+        cells += `<td class="text-end ${mom === null ? '' : (mom >= 0 ? 'text-success' : 'text-danger')}" style="font-size:11px;">${mom !== null ? (mom >= 0 ? '+' : '') + mom.toFixed(1) + '%' : '-'}</td>`;
+        prevTEU = v26;
+      });
+      html += `<tr class="port-row ym${idx} collapsed"><td></td><td>${p.port}</td>${cells}</tr>`;
+    });
+    idx++;
+  });
+  tb.innerHTML = html;
+
+  if (!tb._delegated) {
+    tb._delegated = true;
+    tb.addEventListener('click', function(e) {
+      const row = e.target.closest('.region-row');
+      if (!row) return;
+      const target = row.dataset.target;
+      document.querySelectorAll('.' + target).forEach(c => c.classList.toggle('collapsed'));
       row.querySelector('.region-toggle').textContent =
         row.querySelector('.region-toggle').textContent === '▶' ? '▼' : '▶';
     });
