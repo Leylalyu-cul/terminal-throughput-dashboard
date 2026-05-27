@@ -354,8 +354,7 @@ body {
   <!-- Tabs -->
   <div class="tabs-wrapper">
     <div class="tab-nav" id="tabNav">
-      <button class="tab-btn active" data-tab="tabSource">📋 原始数据</button>
-      <button class="tab-btn" data-tab="tabPortMonth">📅 Port x Month</button>
+      <button class="tab-btn active" data-tab="tabPortMonth">📅 Port x Month</button>
       <button class="tab-btn" data-tab="tabLaneMonth">🛤️ Lane x Month</button>
       <button class="tab-btn" data-tab="tabPortLaneType">📦 Port x Lane x Type</button>
       <button class="tab-btn" data-tab="tabYoyMom">📈 同比/环比</button>
@@ -364,20 +363,7 @@ body {
     </div>
     <div class="tab-content-wrapper">
 
-      <div class="tab-pane active" id="tabSource">
-        <div class="panel">
-          <div class="panel-header">
-            <span>原始数据 <span class="count-badge" id="sourceCount">0</span></span>
-            <div class="filter-bar">
-              <select id="regionFilter"><option value="">全部区域</option></select>
-              <input type="text" id="sourceSearch" placeholder="搜索港口/航线...">
-            </div>
-          </div>
-          <div class="table-wrap"><table><thead id="sourceHeader"></thead><tbody id="sourceBody"></tbody></table></div>
-        </div>
-      </div>
-
-      <div class="tab-pane" id="tabPortMonth">
+      <div class="tab-pane active" id="tabPortMonth">
         <div class="panel">
           <div class="panel-header"><span>Port x Month <span class="sub">按区域和港口汇总月度货量</span></span></div>
           <div class="table-wrap"><table id="portMonthTable"><thead id="portMonthHeader"></thead><tbody id="portMonthBody"></tbody></table></div>
@@ -555,11 +541,6 @@ function renderAll() {
   document.getElementById('sumLanes').textContent = lanes.size;
   document.getElementById('navInfo').textContent = `${d.length} 条记录 · ${ports.size} 港口 · ${lanes.size} 航线`;
 
-  const regions = [...new Set(d.map(r => r.Region))].sort();
-  const sel = document.getElementById('regionFilter');
-  regions.forEach(r => { sel.innerHTML += `<option value="${r}">${r}</option>`; });
-
-  renderSourceData(d);
   renderPortMonth(d);
   renderLaneMonth(d);
   renderPortLaneType(d);
@@ -568,26 +549,6 @@ function renderAll() {
   renderBooking(d);
 
   setupTabs();
-}
-
-// ---- Source Data ----
-function renderSourceData(d) {
-  const cols = ['Region','Port','Lane','TYPE','Load Status','ATD Month','Actual TEU','Booking TEU'];
-  document.getElementById('sourceHeader').innerHTML = cols.map(c => `<th>${c}</th>`).join('');
-  const tb = document.getElementById('sourceBody');
-  function render(filterRegion='', search='') {
-    let filtered = d;
-    if (filterRegion) filtered = filtered.filter(r => r.Region === filterRegion);
-    if (search) { const s = search.toLowerCase(); filtered = filtered.filter(r => (r.Port+'').toLowerCase().includes(s) || (r.Lane+'').toLowerCase().includes(s)); }
-    document.getElementById('sourceCount').textContent = filtered.length + ' 行';
-    tb.innerHTML = filtered.slice(0, 500).map(r => `<tr>${
-      cols.map(c => `<td>${r[c] ?? ''}</td>`).join('')
-    }</tr>`).join('');
-    if (filtered.length > 500) tb.innerHTML += `<tr><td colspan="${cols.length}" style="text-align:center;color:var(--text-secondary);padding:12px;">仅显示前 500 行，共 ${filtered.length} 行</td></tr>`;
-  }
-  render();
-  document.getElementById('sourceSearch').oninput = function() { render(document.getElementById('regionFilter').value, this.value); };
-  document.getElementById('regionFilter').onchange = function() { render(this.value, document.getElementById('sourceSearch').value); };
 }
 
 // ---- Port x Month ----
